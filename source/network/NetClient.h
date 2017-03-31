@@ -36,7 +36,7 @@ class ScriptInterface;
 class CNetClientWorker;
 
 // NetClient session FSM states
-enum
+enum NetClientState
 {
 	NCS_UNCONNECTED,
 	NCS_CONNECT,
@@ -212,6 +212,14 @@ private:
 	void CheckServerConnection();
 
 	/**
+	 * Internal script context for (de)serializing script messages,
+	 * and for storing game attributes.
+	 * (TODO: we shouldn't bother deserializing (except for debug printing of messages),
+	 * we should just forward messages blindly and efficiently.)
+	 */
+	ScriptInterface* m_ScriptInterface;
+
+	/**
 	 * Flush any queued outgoing network messages.
 	 * This should be called soon after sending a group of messages that may be batched together.
 	 */
@@ -346,7 +354,9 @@ private:
 	/// Time when the server was last checked for timeouts and bad latency
 	std::time_t m_LastConnectionCheck;
 
-		// Thread-related stuff:
+
+  NetClientState m_State;
+	// Thread-related stuff:
 
 	static void* RunThread(void* data);
 	void Run();

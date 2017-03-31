@@ -34,6 +34,7 @@
 #include "ps/GUID.h"
 #include "ps/Loader.h"
 #include "scriptinterface/ScriptInterface.h"
+#include "scriptinterface/ScriptRuntime.h"
 #include "simulation2/Simulation2.h"
 
 CNetClient *g_NetClient = NULL;
@@ -142,7 +143,7 @@ CNetClientWorker::~CNetClientWorker()
 {
 	DestroyConnection();
 
-	/*	if (m_State != SERVER_STATE_UNCONNECTED)
+	if (m_State != NCS_UNCONNECTED)
 	{
 		// Tell the thread to shut down
 		{
@@ -156,13 +157,13 @@ CNetClientWorker::~CNetClientWorker()
 
 	// Clean up resources
 
-	delete m_Stats;
+	// delete m_Stats;
 
-	for (CNetServerSession* session : m_Sessions)
+	/*for (CNetClientSession* session : m_Session)
 	{
-		session->DisconnectNow(NDR_SERVER_SHUTDOWN);
+		session->Disconnect(NCS_UNCONNECTED);
 		delete session;
-	}
+	}*
 
 	if (m_Host)
 		enet_host_destroy(m_Host);
@@ -183,7 +184,7 @@ bool CNetClientWorker::SetupConnection(const CStr& server, const u16 port)
 	bool ok = session->Connect(server, port, m_IsLocalClient, enetClient);
 	SetAndOwnSession(session);
 
-	//m_State = SERVER_STATE_PREGAME;
+	m_State = NCS_PREGAME;
 
 	// Launch the worker thread
 	int ret = pthread_create(&m_WorkerThread, NULL, &RunThread, this);
@@ -220,7 +221,8 @@ void CNetClientWorker::Poll()
 
 void* CNetClientWorker::RunThread(void* data)
 {
-	debug_SetThreadName("NetClient");
+
+  // debug_SetThreadName("NetClient");
 
 	static_cast<CNetClientWorker*>(data)->Run();
 
@@ -231,6 +233,7 @@ void CNetClientWorker::Run()
 {
 	// The script runtime uses the profiler and therefore the thread must be registered before the runtime is created
 	g_Profiler2.RegisterCurrentThread("Net client");
+  m_ScriptInterface = new ScriptInterface("Engine", "Net client", ScriptInterface::CreateRuntime(g_ScriptRuntime));
 
 	while (true)
 	{
@@ -244,6 +247,8 @@ void CNetClientWorker::Run()
 		// Update profiler stats
 		//m_Stats->LatchHostState(m_Host);
 	}
+
+  SAFE_DELETE(m_ScriptInterface);
 }
 
 bool CNetClientWorker::RunStep()
@@ -252,7 +257,29 @@ bool CNetClientWorker::RunStep()
 	// (Do as little work as possible while the mutex is held open,
 	// to avoid performance problems and deadlocks.)
 
+  // exit (1);
+  m_ScriptInterface->GetRuntime()->MaybeIncrementalGC(0.5f);
+
+  JSContext* cx = m_ScriptInterface->GetContext();
+	JSAutoRequest rq(cx);
+
+  std::vector<bool> newStartGame;
+	std::vector<std::string> newGameAttributes;
+	std::vector<u32> newTurnLength;
+
+	{
+		CScopeLock lock(m_WorkerMutex);
+
+		if (m_Shutdown)
+			return false;
+
+		newStartGame.swap(m_StartGameQueue);
+		newGameAttributes.swap(m_GameAttributesQueue);
+		newTurnLength.swap(m_TurnLengthQueue);
+	}
+
 	CheckServerConnection();
+
 
 	return true;
 }

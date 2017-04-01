@@ -71,12 +71,15 @@ private:
 CNetClientWorker::CNetClientWorker(CGame* game, bool isLocalClient) :
 	m_Session(NULL),
 	m_UserName(L"anonymous"),
+	m_Shutdown(false),
+	m_ScriptInterface(NULL),
 	m_GUID(ps_generate_guid()), m_HostID((u32)-1), m_ClientTurnManager(NULL), m_Game(game),
 	m_GameAttributes(game->GetSimulation2()->GetScriptInterface().GetContext()),
 	m_IsLocalClient(isLocalClient),
 	m_LastConnectionCheck(0),
 	m_Rejoin(false)
 {
+	m_State = NCS_UNCONNECTED;
 	m_Game->SetTurnManager(NULL); // delete the old local turn manager so we don't accidentally use it
 
 	void* context = this;

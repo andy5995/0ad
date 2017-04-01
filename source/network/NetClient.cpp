@@ -152,7 +152,8 @@ CNetClientWorker::~CNetClientWorker()
 		}
 
 		// Wait for it to shut down cleanly
-		pthread_join(m_WorkerThread, NULL);
+		int ret = pthread_join(m_WorkerThread, NULL);
+		printf ("%d - return join\n", ret);
 	}
 
 	// Clean up resources
@@ -221,9 +222,7 @@ void CNetClientWorker::Poll()
 
 void* CNetClientWorker::RunThread(void* data)
 {
-
-  // debug_SetThreadName("NetClient");
-
+	// debug_SetThreadName("NetClient");
 	static_cast<CNetClientWorker*>(data)->Run();
 
 	return NULL;
@@ -233,7 +232,9 @@ void CNetClientWorker::Run()
 {
 	// The script runtime uses the profiler and therefore the thread must be registered before the runtime is created
 	g_Profiler2.RegisterCurrentThread("Net client");
-  m_ScriptInterface = new ScriptInterface("Engine", "Net client", ScriptInterface::CreateRuntime(g_ScriptRuntime));
+	m_ScriptInterface = new ScriptInterface("Engine", "Net client", ScriptInterface::CreateRuntime(g_ScriptRuntime));
+
+	m_GameAttributes.init(m_ScriptInterface->GetJSRuntime(), JS::UndefinedValue());
 
 	while (true)
 	{
@@ -248,7 +249,7 @@ void CNetClientWorker::Run()
 		//m_Stats->LatchHostState(m_Host);
 	}
 
-  SAFE_DELETE(m_ScriptInterface);
+	SAFE_DELETE(m_ScriptInterface);
 }
 
 bool CNetClientWorker::RunStep()
@@ -256,14 +257,12 @@ bool CNetClientWorker::RunStep()
 	// Check for messages from the game thread.
 	// (Do as little work as possible while the mutex is held open,
 	// to avoid performance problems and deadlocks.)
+	m_ScriptInterface->GetRuntime()->MaybeIncrementalGC(0.5f);
 
-  // exit (1);
-  m_ScriptInterface->GetRuntime()->MaybeIncrementalGC(0.5f);
-
-  JSContext* cx = m_ScriptInterface->GetContext();
+	JSContext* cx = m_ScriptInterface->GetContext();
 	JSAutoRequest rq(cx);
 
-  std::vector<bool> newStartGame;
+	std::vector<bool> newStartGame;
 	std::vector<std::string> newGameAttributes;
 	std::vector<u32> newTurnLength;
 
@@ -279,7 +278,6 @@ bool CNetClientWorker::RunStep()
 	}
 
 	CheckServerConnection();
-
 
 	return true;
 }

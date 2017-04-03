@@ -265,9 +265,8 @@ bool CNetClientWorker::RunStep()
 	JSContext* cx = m_ScriptInterface->GetContext();
 	JSAutoRequest rq(cx);
 
-	std::vector<bool> newStartGame;
-	std::vector<std::string> newGameAttributes;
-	std::vector<u32> newTurnLength;
+	std::vector<std::string> newSendGameSetupMessage;
+	std::vector<std::string> newGuiPoll;
 
 	{
 		CScopeLock lock(m_WorkerMutex);
@@ -275,9 +274,9 @@ bool CNetClientWorker::RunStep()
 		if (m_Shutdown)
 			return false;
 
-		newStartGame.swap(m_StartGameQueue);
-		newGameAttributes.swap(m_GameAttributesQueue);
-		newTurnLength.swap(m_TurnLengthQueue);
+		newSendGameSetupMessage.swap(m_SendGameSetupMessageQueue);
+		newGuiPoll.swap(m_GuiPollQueue);
+
 	}
 
 	CheckServerConnection();
@@ -988,7 +987,12 @@ bool CNetClient::SetupConnection(const CStr& server, const u16 port)
 
 void CNetClient::SendGameSetupMessage(JS::MutableHandleValue attrs, ScriptInterface& scriptInterface)
 {
-	m_Worker->SendGameSetupMessage(attrs, scriptInterface);
+	// Pass the attributes as JSON, since that's the easiest safe
+	// cross-thread way of passing script data
+	std::string attrsJSON = scriptInterface.StringifyJSON(attrs, false);
+
+	CScopeLock lock(m_Worker->m_WorkerMutex);
+	m_Worker->m_SendGameSetupMessageQueue.push_back(attrsJSON);
 }
 
 void CNetClient::SendStartGameMessage()
@@ -1011,7 +1015,13 @@ void CNetClient::LoadFinished()
 
 void CNetClient::GuiPoll(JS::MutableHandleValue ret)
 {
-	m_Worker->GuiPoll(ret);
+	// Pass the attributes as JSON, since that's the easiest safe
+	// cross-thread way of passing script data
+	ScriptInterface& scriptInterface = GetScriptInterface();
+	std::string retJSON = scriptInterface.StringifyJSON(ret, false);
+
+	CScopeLock lock(m_Worker->m_WorkerMutex);
+	m_Worker->m_GuiPollQueue.push_back(retJSON);
 }
 
 ScriptInterface& CNetClient::GetScriptInterface()

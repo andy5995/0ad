@@ -368,9 +368,8 @@ private:
 	bool m_Shutdown; // protected by m_WorkerMutex
 
 	// Queues for messages sent by the game thread:
-	std::vector<bool> m_StartGameQueue; // protected by m_WorkerMutex
-	std::vector<std::string> m_GameAttributesQueue; // protected by m_WorkerMutex
-	std::vector<u32> m_TurnLengthQueue; // protected by m_WorkerMutex
+	std::vector<std::string> m_GuiPollQueue; // protected by m_WorkerMutex
+	std::vector<std::string> m_SendGameSetupMessageQueue; // protected by m_WorkerMutex
 };
 
 /// Global network client for the standard game

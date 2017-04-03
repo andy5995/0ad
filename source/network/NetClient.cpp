@@ -279,6 +279,13 @@ bool CNetClientWorker::RunStep()
 
 	}
 
+	if (!newGuiPoll.empty())
+	{
+		JS::RootedValue retGuiPoll(cx);
+		GetScriptInterface().ParseJSON(newGuiPoll.back(), &retGuiPoll);
+		GuiPoll(&retGuiPoll);
+	}
+
 	CheckServerConnection();
 
 	return true;

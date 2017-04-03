@@ -1778,7 +1778,7 @@ function updateGUIDropdown(name, idx = undefined)
 	let title = Engine.GetGUIObjectByName(guiName + "Title" + guiIdx + idxName);
 
 	if (guiType == "Dropdown")
-		Engine.GetGUIObjectByName(guiName + "Checkbox" + guiIdx).hidden = true;	
+		Engine.GetGUIObjectByName(guiName + "Checkbox" + guiIdx).hidden = true;
 
 	let indexHidden = isControlArrayElementHidden(idx);
 	let obj = (idx === undefined ? g_Dropdowns : g_PlayerDropdowns)[name];
@@ -1823,7 +1823,7 @@ function updateGUICheckbox(name)
 	let title = Engine.GetGUIObjectByName(guiName + "Title" + guiIdx);
 
 	if (guiType == "Checkbox")
-		Engine.GetGUIObjectByName(guiName + "Dropdown" + guiIdx).hidden = true;	
+		Engine.GetGUIObjectByName(guiName + "Dropdown" + guiIdx).hidden = true;
 
 	checkbox.checked = checked;
 	checkbox.enabled = enabled;
@@ -2314,7 +2314,7 @@ function resetReadyData()
 		g_IsReady = 2;
 	else if (g_IsController)
 	{
-		Engine.ClearAllPlayerReady();
+/*		Engine.ClearAllPlayerReady(); andy_debug */
 		setReady(2, true);
 	}
 	else if (g_IsReady != 2)

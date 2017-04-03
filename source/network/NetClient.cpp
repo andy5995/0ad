@@ -276,7 +276,6 @@ bool CNetClientWorker::RunStep()
 
 		newSendGameSetupMessage.swap(m_SendGameSetupMessageQueue);
 		newGuiPoll.swap(m_GuiPollQueue);
-
 	}
 
 	if (!newGuiPoll.empty())
@@ -284,6 +283,13 @@ bool CNetClientWorker::RunStep()
 		JS::RootedValue retGuiPoll(cx);
 		GetScriptInterface().ParseJSON(newGuiPoll.back(), &retGuiPoll);
 		GuiPoll(&retGuiPoll);
+	}
+
+	if (!newSendGameSetupMessage.empty())
+	{
+		JS::RootedValue retSendGameSetupMessage(cx);
+		GetScriptInterface().ParseJSON(newSendGameSetupMessage.back(), &retSendGameSetupMessage);
+		SendGameSetupMessage(&retSendGameSetupMessage, *m_ScriptInterface);
 	}
 
 	CheckServerConnection();

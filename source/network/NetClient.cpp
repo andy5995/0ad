@@ -74,7 +74,7 @@ CNetClientWorker::CNetClientWorker(CGame* game, bool isLocalClient) :
 	m_Shutdown(false),
 	m_ScriptInterface(NULL),
 	m_GUID(ps_generate_guid()), m_HostID((u32)-1), m_ClientTurnManager(NULL), m_Game(game),
-	m_GameAttributes(game->GetSimulation2()->GetScriptInterface().GetContext()),
+	// m_GameAttributes(game->GetSimulation2()->GetScriptInterface().GetContext()),
 	m_IsLocalClient(isLocalClient),
 	m_LastConnectionCheck(0),
 	m_Rejoin(false)
@@ -376,7 +376,7 @@ std::string CNetClientWorker::TestReadGuiMessages()
 
 ScriptInterface& CNetClientWorker::GetScriptInterface()
 {
-	return m_Game->GetSimulation2()->GetScriptInterface();
+	return *m_ScriptInterface;
 }
 
 void CNetClientWorker::PostPlayerAssignmentsToScript()
@@ -1030,13 +1030,12 @@ void CNetClient::GuiPoll(JS::MutableHandleValue ret)
 {
 	// Pass the attributes as JSON, since that's the easiest safe
 	// cross-thread way of passing script data
-	/*
 	ScriptInterface& scriptInterface = GetScriptInterface();
 	std::string retJSON = scriptInterface.StringifyJSON(ret, false);
 
 	CScopeLock lock(m_Worker->m_WorkerMutex);
-	m_Worker->m_GuiPollQueue.push_back(retJSON); */
-	m_Worker->GuiPoll(ret);
+	m_Worker->m_GuiPollQueue.push_back(retJSON);
+	// m_Worker->GuiPoll(ret);
 }
 
 ScriptInterface& CNetClient::GetScriptInterface()

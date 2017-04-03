@@ -156,7 +156,7 @@ CNetClientWorker::~CNetClientWorker()
 
 		// Wait for it to shut down cleanly
 		int ret = pthread_join(m_WorkerThread, NULL);
-		printf ("%d - return join\n", ret);
+		debug_printf ("%d - return join\n", ret);
 	}
 
 	// Clean up resources
@@ -278,23 +278,19 @@ bool CNetClientWorker::RunStep()
 		newGuiPoll.swap(m_GuiPollQueue);
 	}
 
-	/*
 	if (!newGuiPoll.empty())
 	{
 		JS::RootedValue retGuiPoll(cx);
 		GetScriptInterface().ParseJSON(newGuiPoll.back(), &retGuiPoll);
 		GuiPoll(&retGuiPoll);
 	}
-	*/
 
-	/*
 	if (!newSendGameSetupMessage.empty())
 	{
 		JS::RootedValue retSendGameSetupMessage(cx);
 		GetScriptInterface().ParseJSON(newSendGameSetupMessage.back(), &retSendGameSetupMessage);
 		SendGameSetupMessage(&retSendGameSetupMessage, *m_ScriptInterface);
 	}
-	*/
 
 	CheckServerConnection();
 
@@ -1092,4 +1088,3 @@ std::string CNetClient::TestReadGuiMessages()
 {
 	return m_Worker->TestReadGuiMessages();
 }
-

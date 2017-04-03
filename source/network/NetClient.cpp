@@ -978,7 +978,7 @@ CNetClient::~CNetClient()
 
 void CNetClient::SetUserName(const CStrW& username)
 {
-	m_Worker->m_UserName = username;
+	m_Worker->SetUserName(username);
 }
 
 bool CNetClient::SetupConnection(const CStr& server, const u16 port)

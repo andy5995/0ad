@@ -336,6 +336,8 @@ void CNetClientWorker::Flush()
 
 void CNetClientWorker::GuiPoll(JS::MutableHandleValue ret)
 {
+	debug_printf("%s\n", __func__);
+
 	if (m_GuiMessageQueue.empty())
 	{
 		ret.setUndefined();
@@ -1029,6 +1031,8 @@ void CNetClient::LoadFinished()
 
 void CNetClient::GuiPoll(JS::MutableHandleValue ret)
 {
+	debug_printf("%s\n", __func__);
+
 	/* JSContext* cxNet = g_NetClient->m_Worker->GetScriptInterface().GetContext();
 	//JSAutoRequest rqNet(cxNet);
 	JS::RootedValue data(cxNet);

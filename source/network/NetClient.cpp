@@ -278,6 +278,13 @@ bool CNetClientWorker::RunStep()
 		newGuiPoll.swap(m_GuiPollQueue);
 	}
 
+	if (!newSendGameSetupMessage.empty())
+	{
+		JS::RootedValue retSendGameSetupMessage(cx);
+		GetScriptInterface().ParseJSON(newSendGameSetupMessage.back(), &retSendGameSetupMessage);
+		SendGameSetupMessage(&retSendGameSetupMessage, *m_ScriptInterface);
+	}
+
 	CheckServerConnection();
 
 	debug_printf("::%d", __LINE__);
@@ -998,14 +1005,13 @@ void CNetClient::SendGameSetupMessage(JS::MutableHandleValue attrs, ScriptInterf
 {
 	// Pass the attributes as JSON, since that's the easiest safe
 	// cross-thread way of passing script data
-	/*
 	std::string attrsJSON = scriptInterface.StringifyJSON(attrs, false);
 
 	CScopeLock lock(m_Worker->m_WorkerMutex);
 	m_Worker->m_SendGameSetupMessageQueue.push_back(attrsJSON);
-	*/
 
-	m_Worker->SendGameSetupMessage(attrs, scriptInterface);
+
+	/* m_Worker->SendGameSetupMessage(attrs, scriptInterface); */
 }
 
 void CNetClient::SendStartGameMessage()

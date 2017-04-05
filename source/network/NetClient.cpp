@@ -1036,14 +1036,13 @@ void CNetClient::GuiPoll(JS::MutableHandleValue ret)
 {
 	debug_printf("%s\n", __func__);
 
-	/* JSContext* cxNet = g_NetClient->m_Worker->GetScriptInterface().GetContext();
+	JSContext* cxNet = g_NetClient->m_Worker->GetScriptInterface().GetContext();
 	//JSAutoRequest rqNet(cxNet);
 	JS::RootedValue data(cxNet);
-	g_NetClient->GuiPoll(&data);
+	m_Worker->GuiPoll(&data);
 	ret.set(GetScriptInterface().CloneValueFromOtherContext(m_Worker->GetScriptInterface(), data));
-	*/
 
-	m_Worker->GuiPoll(ret);
+	/*m_Worker->GuiPoll(ret); */
 }
 
 ScriptInterface& CNetClient::GetScriptInterface()

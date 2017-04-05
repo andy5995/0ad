@@ -372,7 +372,8 @@ std::string CNetClientWorker::TestReadGuiMessages()
 
 ScriptInterface& CNetClientWorker::GetScriptInterface()
 {
-	return *m_ScriptInterface;
+	// return *m_ScriptInterface;
+	return m_Game->GetSimulation2()->GetScriptInterface();
 }
 
 void CNetClientWorker::PostPlayerAssignmentsToScript()
@@ -1028,11 +1029,14 @@ void CNetClient::LoadFinished()
 
 void CNetClient::GuiPoll(JS::MutableHandleValue ret)
 {
-    JSContext* cxNet = g_NetClient->m_Worker->GetScriptInterface().GetContext();
-    //JSAutoRequest rqNet(cxNet);
-    JS::RootedValue data(cxNet);
-    g_NetClient->GuiPoll(&data);
-    ret.set(GetScriptInterface().CloneValueFromOtherContext(m_Worker->GetScriptInterface(), data));
+	/* JSContext* cxNet = g_NetClient->m_Worker->GetScriptInterface().GetContext();
+	//JSAutoRequest rqNet(cxNet);
+	JS::RootedValue data(cxNet);
+	g_NetClient->GuiPoll(&data);
+	ret.set(GetScriptInterface().CloneValueFromOtherContext(m_Worker->GetScriptInterface(), data));
+	*/
+
+	m_Worker->GuiPoll(ret);
 }
 
 ScriptInterface& CNetClient::GetScriptInterface()

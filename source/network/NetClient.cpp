@@ -278,13 +278,6 @@ bool CNetClientWorker::RunStep()
 		newGuiPoll.swap(m_GuiPollQueue);
 	}
 
-	if (!newGuiPoll.empty())
-	{
-		JS::RootedValue retGuiPoll(cx);
-		GetScriptInterface().ParseJSON(newGuiPoll.back(), &retGuiPoll);
-		GuiPoll(&retGuiPoll);
-	}
-
 	if (!newSendGameSetupMessage.empty())
 	{
 		JS::RootedValue retSendGameSetupMessage(cx);
@@ -1028,19 +1021,16 @@ void CNetClient::LoadFinished()
 
 void CNetClient::GuiPoll(JS::MutableHandleValue ret)
 {
-	// Pass the attributes as JSON, since that's the easiest safe
-	// cross-thread way of passing script data
-	ScriptInterface& scriptInterface = GetScriptInterface();
-	std::string retJSON = scriptInterface.StringifyJSON(ret, false);
-
-	CScopeLock lock(m_Worker->m_WorkerMutex);
-	m_Worker->m_GuiPollQueue.push_back(retJSON);
-	// m_Worker->GuiPoll(ret);
+    JSContext* cxNet = g_NetClient->m_Worker->GetScriptInterface().GetContext();
+    //JSAutoRequest rqNet(cxNet);
+    JS::RootedValue data(cxNet);
+    g_NetClient->GuiPoll(&data);
+    ret.set(GetScriptInterface().CloneValueFromOtherContext(m_Worker->GetScriptInterface(), data));
 }
 
 ScriptInterface& CNetClient::GetScriptInterface()
 {
-	return m_Worker->GetScriptInterface();
+	return g_Game->GetSimulation2()->GetScriptInterface();
 }
 
 void CNetClient::SendAssignPlayerMessage(const int playerID, const CStr& guid)

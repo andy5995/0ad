@@ -225,7 +225,6 @@ void CNetClientWorker::Poll()
 
 void* CNetClientWorker::RunThread(void* data)
 {
-	debug_printf("%d\n", __LINE__);
 	// debug_SetThreadName("NetClient");
 	static_cast<CNetClientWorker*>(data)->Run();
 
@@ -234,7 +233,6 @@ void* CNetClientWorker::RunThread(void* data)
 
 void CNetClientWorker::Run()
 {
-	debug_printf("%d\n", __LINE__);
 	// The script runtime uses the profiler and therefore the thread must be registered before the runtime is created
 	g_Profiler2.RegisterCurrentThread("Net client");
 	m_ScriptInterface = new ScriptInterface("Engine", "Net client", ScriptInterface::CreateRuntime(g_ScriptRuntime));
@@ -259,7 +257,6 @@ void CNetClientWorker::Run()
 
 bool CNetClientWorker::RunStep()
 {
-	debug_printf("%d\n", __LINE__);
 	// Check for messages from the game thread.
 	// (Do as little work as possible while the mutex is held open,
 	// to avoid performance problems and deadlocks.)
@@ -283,14 +280,14 @@ bool CNetClientWorker::RunStep()
 
 	CheckServerConnection();
 
-	debug_printf("%d\n", __LINE__);
+	debug_printf("::%d", __LINE__);
 
 	return true;
 }
 
 void CNetClientWorker::CheckServerConnection()
 {
-	debug_printf("%d\n", __LINE__);
+	debug_printf("::%d", __LINE__);
 	// Trigger local warnings if the connection to the server is bad.
 	// At most once per second.
 	std::time_t now = std::time(nullptr);
@@ -298,11 +295,11 @@ void CNetClientWorker::CheckServerConnection()
 		return;
 
 	m_LastConnectionCheck = now;
-	debug_printf("%d\n", __LINE__);
+	debug_printf("::%d", __LINE__);
 	JSContext* cx = GetScriptInterface().GetContext();
 	JSAutoRequest rq(cx);
 
-	debug_printf("%d\n", __LINE__);
+	debug_printf("::%d", __LINE__);
 
 	// Report if we are losing the connection to the server
 	u32 lastReceived = m_Session->GetLastReceivedTime();
@@ -315,7 +312,7 @@ void CNetClientWorker::CheckServerConnection()
 		return;
 	}
 
-	debug_printf("%d\n", __LINE__);
+	debug_printf("::%d", __LINE__);
 
 	// Report if we have a bad ping to the server
 	u32 meanRTT = m_Session->GetMeanRTT();

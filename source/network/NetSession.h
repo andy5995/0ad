@@ -37,10 +37,6 @@ extern const u32 MAXIMUM_HOST_TIMEOUT;
 class CNetClientWorker;
 class CNetServerWorker;
 
-class CNetStatsTable;
-
-typedef struct _ENetHost ENetHost;
-
 /**
  * @file
  * Network client/server sessions.
@@ -70,7 +66,6 @@ class CNetClientSession : public INetSession
 
 public:
 	CNetClientSession(CNetClientWorker& client);
-	~CNetClientSession();
 
 	bool Connect(const CStr& server, const u16 port, const bool isLocalClient, ENetHost* enetClient);
 
@@ -114,7 +109,6 @@ private:
 
 	ENetHost* m_Host;
 	ENetPeer* m_Server;
-	CNetStatsTable* m_Stats;
 };
 
 

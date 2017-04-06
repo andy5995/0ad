@@ -22,6 +22,7 @@
 #include "NetClientTurnManager.h"
 #include "NetMessage.h"
 #include "NetSession.h"
+#include "NetStats.h"
 
 #include "lib/byte_order.h"
 #include "lib/external_libraries/enet.h"
@@ -37,7 +38,13 @@
 #include "scriptinterface/ScriptRuntime.h"
 #include "simulation2/Simulation2.h"
 
+#include "lib/external_libraries/enet.h"
+#include "ps/ProfileViewer.h"
+
+
 CNetClient *g_NetClient = NULL;
+
+static const int CHANNEL_COUNT = 1;
 
 /**
  * Async task for receiving the initial game state when rejoining an
@@ -74,10 +81,10 @@ CNetClientWorker::CNetClientWorker(CGame* game, bool isLocalClient) :
 	m_Shutdown(false),
 	m_ScriptInterface(NULL),
 	m_GUID(ps_generate_guid()), m_HostID((u32)-1), m_ClientTurnManager(NULL), m_Game(game),
-	// m_GameAttributes(game->GetSimulation2()->GetScriptInterface().GetContext()),
+	m_Host(NULL),
+	m_Stats(NULL),
 	m_IsLocalClient(isLocalClient),
-	m_LastConnectionCheck(0),
-	m_Rejoin(false)
+	m_LastConnectionCheck(0), m_Rejoin(false)
 {
 	m_State = NCS_UNCONNECTED;
 	m_Game->SetTurnManager(NULL); // delete the old local turn manager so we don't accidentally use it
@@ -161,18 +168,24 @@ CNetClientWorker::~CNetClientWorker()
 
 	// Clean up resources
 
-	// delete m_Stats;
+	delete m_Stats;
 
-	/*for (CNetClientSession* session : m_Session)
+	if (m_Host && m_Server)
 	{
-		session->Disconnect(NCS_UNCONNECTED);
-		delete session;
-	}*
+		// Disconnect immediately (we can't wait for acks)
+		enet_peer_disconnect_now(m_Server, NDR_SERVER_SHUTDOWN);
+		enet_host_destroy(m_Host);
+
+		m_Host = NULL;
+		m_Server = NULL;
+	}
+
+	m_Session->Disconnect(NCS_UNCONNECTED);
 
 	if (m_Host)
 		enet_host_destroy(m_Host);
 
-	delete m_ServerTurnManager; */
+	/* delete m_ServerTurnManager; */
 }
 
 void CNetClientWorker::SetUserName(const CStrW& username)
@@ -184,9 +197,47 @@ void CNetClientWorker::SetUserName(const CStrW& username)
 
 bool CNetClientWorker::SetupConnection(const CStr& server, const u16 port)
 {
+	ENSURE(m_State == NCS_UNCONNECTED);
+	ENSURE(!m_Host);
+	// ENSURE(!m_Server);
+
+	// Create ENet host
+	ENetHost* host = enet_host_create(NULL, 1, CHANNEL_COUNT, 0, 0);
+	if (!host)
+		return false;
+
+	// CNetClientSession* session = new CNetClientSession(*this);
+	// bool ok = session->Connect(server, port, m_IsLocalClient);
+	// SetAndOwnSession(session);
+
+	// Bind to specified host
+	ENetAddress addr;
+	addr.port = port;
+	if (enet_address_set_host(&addr, server.c_str()) < 0)
+		return false;
+
 	CNetClientSession* session = new CNetClientSession(*this);
-	bool ok = session->Connect(server, port, m_IsLocalClient, enetClient);
+
+	// Initiate connection to server
+	ENetPeer* peer = enet_host_connect(host, &addr, CHANNEL_COUNT, 0);
+	if (!peer)
+		return false;
+
 	SetAndOwnSession(session);
+
+	m_Host = host;
+	m_Server = peer;
+
+	// Prevent the local client of the host from timing out too quickly.
+#if (ENET_VERSION >= ENET_VERSION_CREATE(1, 3, 4))
+	if (m_IsLocalClient)
+		enet_peer_timeout(peer, 1, MAXIMUM_HOST_TIMEOUT, MAXIMUM_HOST_TIMEOUT);
+#endif
+
+	m_Stats = new CNetStatsTable(m_Server);
+
+	if (CProfileViewer::IsInitialised())
+		g_ProfileViewer.AddRootTable(m_Stats);
 
 	m_State = NCS_PREGAME;
 
@@ -194,7 +245,7 @@ bool CNetClientWorker::SetupConnection(const CStr& server, const u16 port)
 	int ret = pthread_create(&m_WorkerThread, NULL, &RunThread, this);
 	ENSURE(ret == 0);
 
-	return ok;
+	return true;
 }
 
 void CNetClientWorker::SetAndOwnSession(CNetClientSession* session)
@@ -244,12 +295,8 @@ void CNetClientWorker::Run()
 		if (!RunStep())
 			break;
 
-		// Implement autostart mode
-		//if (m_State == CLIENT_STATE_PREGAME && (int)m_PlayerAssignments.size() == m_AutostartPlayers)
-		//	StartGame();
-
 		// Update profiler stats
-		//m_Stats->LatchHostState(m_Host);
+		m_Stats->LatchHostState(m_Host);
 	}
 
 	SAFE_DELETE(m_ScriptInterface);
@@ -285,7 +332,68 @@ bool CNetClientWorker::RunStep()
 		SendGameSetupMessage(&retSendGameSetupMessage, *m_ScriptInterface);
 	}
 
+	ENSURE(m_Host && m_Server);
+
+	m_Session->GetFileTransferer().Poll();
+
+	ENSURE(m_Host && m_Server);
+
+	enet_host_flush(m_Host);
+
+	// m_FileTransferer.Poll();
+
 	CheckServerConnection();
+
+	ENetEvent event;
+	while (enet_host_service(m_Host, &event, 0) > 0)
+	{
+		switch (event.type)
+		{
+		case ENET_EVENT_TYPE_CONNECT:
+		{
+			ENSURE(event.peer == m_Server);
+
+			// Report the server address
+			char hostname[256] = "(error)";
+			enet_address_get_host_ip(&event.peer->address, hostname, ARRAY_SIZE(hostname));
+
+			LOGMESSAGE("Net client: Connected to %s:%u", hostname, (unsigned int)event.peer->address.port);
+
+			HandleConnect();
+
+			break;
+		}
+
+		case ENET_EVENT_TYPE_DISCONNECT:
+		{
+			ENSURE(event.peer == m_Server);
+
+			LOGMESSAGE("Net client: Disconnected");
+			HandleDisconnect(event.data);
+			break;
+		}
+
+		case ENET_EVENT_TYPE_RECEIVE:
+		{
+			CNetMessage* msg = CNetMessageFactory::CreateMessage(event.packet->data, event.packet->dataLength, GetScriptInterface());
+			if (msg)
+			{
+				LOGMESSAGE("Net client: Received message %s of size %lu from server", msg->ToString().c_str(), (unsigned long)msg->GetSerializedLength());
+
+				HandleMessage(msg);
+
+				delete msg;
+			}
+
+			enet_packet_destroy(event.packet);
+
+			break;
+		}
+
+		case ENET_EVENT_TYPE_NONE:
+			break;
+		}
+	}
 
 	debug_printf("::%d", __LINE__);
 
@@ -1042,7 +1150,7 @@ void CNetClient::GuiPoll(JS::MutableHandleValue ret)
 	m_Worker->GuiPoll(&data);
 	ret.set(GetScriptInterface().CloneValueFromOtherContext(m_Worker->GetScriptInterface(), data));
 
-	/*m_Worker->GuiPoll(ret); */
+	// m_Worker->GuiPoll(ret);
 }
 
 ScriptInterface& CNetClient::GetScriptInterface()

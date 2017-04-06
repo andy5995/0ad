@@ -19,7 +19,7 @@
 #define NETCLIENT_H
 
 #include "network/fsm.h"
-#include "network/NetFileTransfer.h"
+#include "NetFileTransfer.h"
 #include "network/NetHost.h"
 #include "scriptinterface/ScriptVal.h"
 
@@ -33,6 +33,7 @@ class CNetClientSession;
 class CNetClientTurnManager;
 class CNetServer;
 class ScriptInterface;
+class CNetStatsTable;
 class CNetClientWorker;
 
 // NetClient session FSM states
@@ -176,18 +177,18 @@ public:
 	 */
 	bool HandleMessage(CNetMessage* message);
 
-	/**
-	 * Get the script interface associated with this network client,
-	 * which is equivalent to the one used by the CGame in the constructor.
-	 */
-	ScriptInterface& GetScriptInterface();
-
 private:
 	friend class CNetClient;
 	friend class CNetFileReceiveTask_ClientRejoin;
 
 	CNetClientWorker(CGame* game, bool isLocalClient);
   ~CNetClientWorker();
+
+	/**
+	 * Get the script interface associated with this network client,
+	 * which is equivalent to the one used by the CGame in the constructor.
+	 */
+	ScriptInterface& GetScriptInterface();
 
 	void SetUserName(const CStrW& username);
 
@@ -318,6 +319,8 @@ private:
 	 */
 	void PostPlayerAssignmentsToScript();
 
+	CNetStatsTable* m_Stats;
+
 	CGame *m_Game;
 	CStrW m_UserName;
 
@@ -326,6 +329,11 @@ private:
 
 	/// Turn manager associated with the current game (or NULL if we haven't started the game yet)
 	CNetClientTurnManager* m_ClientTurnManager;
+
+	// std::vector<CNetServerSession*> m_Session;
+
+	ENetHost* m_Host;
+	ENetPeer* m_Server;
 
 	/// Unique-per-game identifier of this client, used to identify the sender of simulation commands
 	u32 m_HostID;

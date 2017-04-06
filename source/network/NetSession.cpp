@@ -33,7 +33,7 @@ const u32 MAXIMUM_HOST_TIMEOUT = std::numeric_limits<u32>::max();
 static const int CHANNEL_COUNT = 1;
 
 CNetClientSession::CNetClientSession(CNetClientWorker& client) :
-	m_Client(client), m_FileTransferer(this), m_Host(NULL), m_Server(NULL), m_Stats(NULL)
+	m_Client(client), m_FileTransferer(this), m_Server(NULL)
 {
 }
 
@@ -105,76 +105,18 @@ void CNetClientSession::Disconnect(u32 reason)
 	m_Host = NULL;
 	m_Server = NULL;
 
-	SAFE_DELETE(m_Stats);
+	// SAFE_DELETE(m_Stats);
 }
 
 void CNetClientSession::Poll()
 {
 	PROFILE3("net client poll");
-
-	ENSURE(m_Host && m_Server);
-
-	m_FileTransferer.Poll();
-
-	ENetEvent event;
-	while (enet_host_service(m_Host, &event, 0) > 0)
-	{
-		switch (event.type)
-		{
-		case ENET_EVENT_TYPE_CONNECT:
-		{
-			ENSURE(event.peer == m_Server);
-
-			// Report the server address
-			char hostname[256] = "(error)";
-			enet_address_get_host_ip(&event.peer->address, hostname, ARRAY_SIZE(hostname));
-			LOGMESSAGE("Net client: Connected to %s:%u", hostname, (unsigned int)event.peer->address.port);
-
-			m_Client.HandleConnect();
-
-			break;
-		}
-
-		case ENET_EVENT_TYPE_DISCONNECT:
-		{
-			ENSURE(event.peer == m_Server);
-
-			LOGMESSAGE("Net client: Disconnected");
-			m_Client.HandleDisconnect(event.data);
-			return;
-		}
-
-		case ENET_EVENT_TYPE_RECEIVE:
-		{
-			CNetMessage* msg = CNetMessageFactory::CreateMessage(event.packet->data, event.packet->dataLength, m_Client.GetScriptInterface());
-			if (msg)
-			{
-				LOGMESSAGE("Net client: Received message %s of size %lu from server", msg->ToString().c_str(), (unsigned long)msg->GetSerializedLength());
-
-				m_Client.HandleMessage(msg);
-
-				delete msg;
-			}
-
-			enet_packet_destroy(event.packet);
-
-			break;
-		}
-
-		case ENET_EVENT_TYPE_NONE:
-			break;
-		}
-	}
-
 }
 
 void CNetClientSession::Flush()
 {
 	PROFILE3("net client flush");
 
-	ENSURE(m_Host && m_Server);
-
-	enet_host_flush(m_Host);
 }
 
 bool CNetClientSession::SendMessage(const CNetMessage* message)

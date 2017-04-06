@@ -44,6 +44,15 @@
 
 CNetClient *g_NetClient = NULL;
 
+static CStr DebugName(CNetClientSession* session)
+{
+	if (session == NULL)
+		return "[unknown host]";
+	if (session->GetGUID().empty())
+		return "[unauthed host]";
+	return "[" + session->GetGUID().substr(0, 8) + "...]";
+}
+
 static const int CHANNEL_COUNT = 1;
 
 /**
@@ -220,10 +229,9 @@ bool CNetClientWorker::SetupConnection(const CStr& server, const u16 port)
 
 	// Initiate connection to server
 	ENetPeer* peer = enet_host_connect(host, &addr, CHANNEL_COUNT, 0);
+
 	if (!peer)
 		return false;
-
-	SetAndOwnSession(session);
 
 	m_Host = host;
 	m_Server = peer;
@@ -345,6 +353,7 @@ bool CNetClientWorker::RunStep()
 	CheckServerConnection();
 
 	ENetEvent event;
+
 	while (enet_host_service(m_Host, &event, 0) > 0)
 	{
 		switch (event.type)
@@ -358,6 +367,12 @@ bool CNetClientWorker::RunStep()
 			enet_address_get_host_ip(&event.peer->address, hostname, ARRAY_SIZE(hostname));
 
 			LOGMESSAGE("Net client: Connected to %s:%u", hostname, (unsigned int)event.peer->address.port);
+
+			CNetClientSession* session = new CNetClientSession(*this, event.peer);
+			SetAndOwnSession(session);
+
+			ENSURE(event.peer->data == NULL);
+			event.peer->data = session;
 
 			HandleConnect();
 
@@ -514,12 +529,16 @@ void CNetClientWorker::PostPlayerAssignmentsToScript()
 	PushGuiMessage(msg);
 }
 
-bool CNetClientWorker::SendMessage(const CNetMessage* message)
+bool CNetClientWorker::SendMessage(ENetPeer* peer, const CNetMessage* message)
 {
 	if (!m_Session)
 		return false;
 
-	return m_Session->SendMessage(message);
+	ENSURE(m_Host && m_Server);
+
+	CNetClientSession* session = static_cast<CNetClientSession*>(peer->data);
+
+	return CNetHost::SendMessage(message, peer, DebugName(session).c_str());
 }
 
 void CNetClientWorker::HandleConnect()
@@ -548,7 +567,7 @@ void CNetClientWorker::SendGameSetupMessage(JS::MutableHandleValue attrs, Script
 {
 	CGameSetupMessage gameSetup(scriptInterface);
 	gameSetup.m_Data = attrs;
-	SendMessage(&gameSetup);
+	m_Session->SendMessage(&gameSetup);
 }
 
 void CNetClientWorker::SendAssignPlayerMessage(const int playerID, const CStr& guid)
@@ -556,39 +575,39 @@ void CNetClientWorker::SendAssignPlayerMessage(const int playerID, const CStr& g
 	CAssignPlayerMessage assignPlayer;
 	assignPlayer.m_PlayerID = playerID;
 	assignPlayer.m_GUID = guid;
-	SendMessage(&assignPlayer);
+	m_Session->SendMessage(&assignPlayer);
 }
 
 void CNetClientWorker::SendChatMessage(const std::wstring& text)
 {
 	CChatMessage chat;
 	chat.m_Message = text;
-	SendMessage(&chat);
+	m_Session->SendMessage(&chat);
 }
 
 void CNetClientWorker::SendReadyMessage(const int status)
 {
 	CReadyMessage readyStatus;
 	readyStatus.m_Status = status;
-	SendMessage(&readyStatus);
+	m_Session->SendMessage(&readyStatus);
 }
 
 void CNetClientWorker::SendClearAllReadyMessage()
 {
 	CClearAllReadyMessage clearAllReady;
-	SendMessage(&clearAllReady);
+	m_Session->SendMessage(&clearAllReady);
 }
 
 void CNetClientWorker::SendStartGameMessage()
 {
 	CGameStartMessage gameStart;
-	SendMessage(&gameStart);
+	m_Session->SendMessage(&gameStart);
 }
 
 void CNetClientWorker::SendRejoinedMessage()
 {
 	CRejoinedMessage rejoinedMessage;
-	SendMessage(&rejoinedMessage);
+	m_Session->SendMessage(&rejoinedMessage);
 }
 
 void CNetClientWorker::SendKickPlayerMessage(const CStrW& playerName, bool ban)
@@ -596,14 +615,14 @@ void CNetClientWorker::SendKickPlayerMessage(const CStrW& playerName, bool ban)
 	CKickedMessage kickPlayer;
 	kickPlayer.m_Name = playerName;
 	kickPlayer.m_Ban = ban;
-	SendMessage(&kickPlayer);
+	m_Session->SendMessage(&kickPlayer);
 }
 
 void CNetClientWorker::SendPausedMessage(bool pause)
 {
 	CClientPausedMessage pausedMessage;
 	pausedMessage.m_Pause = pause;
-	SendMessage(&pausedMessage);
+	m_Session->SendMessage(&pausedMessage);
 }
 
 bool CNetClientWorker::HandleMessage(CNetMessage* message)
@@ -689,7 +708,7 @@ void CNetClientWorker::LoadFinished()
 
 	CLoadedGameMessage loaded;
 	loaded.m_CurrentTurn = m_ClientTurnManager->GetCurrentTurn();
-	SendMessage(&loaded);
+	m_Session->SendMessage(&loaded);
 }
 
 bool CNetClientWorker::OnConnect(void* context, CFsmEvent* event)
@@ -718,7 +737,7 @@ bool CNetClientWorker::OnHandshake(void* context, CFsmEvent* event)
 	handshake.m_MagicResponse = PS_PROTOCOL_MAGIC_RESPONSE;
 	handshake.m_ProtocolVersion = PS_PROTOCOL_VERSION;
 	handshake.m_SoftwareVersion = PS_PROTOCOL_VERSION;
-	client->SendMessage(&handshake);
+	client->m_Session->SendMessage(&handshake);
 
 	return true;
 }
@@ -734,7 +753,7 @@ bool CNetClientWorker::OnHandshakeResponse(void* context, CFsmEvent* event)
 	authenticate.m_Name = client->m_UserName;
 	authenticate.m_Password = L""; // TODO
 	authenticate.m_IsLocalClient = client->m_IsLocalClient;
-	client->SendMessage(&authenticate);
+	client->m_Session->SendMessage(&authenticate);
 
 	return true;
 }

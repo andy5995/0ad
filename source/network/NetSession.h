@@ -65,7 +65,9 @@ class CNetClientSession : public INetSession
 	NONCOPYABLE(CNetClientSession);
 
 public:
-	CNetClientSession(CNetClientWorker& client);
+	CNetClientSession(CNetClientWorker& client, ENetPeer* peer);
+
+	const CStr& GetGUID() const { return m_GUID; }
 
 	bool Connect(const CStr& server, const u16 port, const bool isLocalClient, ENetHost* enetClient);
 
@@ -105,12 +107,14 @@ public:
 private:
 	CNetClientWorker& m_Client;
 
+	CStr m_GUID;
+
 	CNetFileTransferer m_FileTransferer;
 
+	ENetPeer* m_Peer;
 	ENetHost* m_Host;
 	ENetPeer* m_Server;
 };
-
 
 /**
  * The server's end of a network session.

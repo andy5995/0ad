@@ -149,6 +149,9 @@ class CNetClientWorker : public CFsm
 	NONCOPYABLE(CNetClientWorker);
 
 public:
+	/// Current network session (or NULL if not connected)
+	CNetClientSession* m_Session;
+
 	/**
 	 * Returns the GUID of the local client.
 	 * Used for distinguishing observers.
@@ -160,7 +163,7 @@ public:
 	 * @param message message to send
 	 * @return true on success
 	 */
-	bool SendMessage(const CNetMessage* message);
+	bool SendMessage(ENetPeer* peer, const CNetMessage* message);
 
 	/**
 	 * Call when the network connection has been successfully initiated.
@@ -323,9 +326,6 @@ private:
 
 	CGame *m_Game;
 	CStrW m_UserName;
-
-	/// Current network session (or NULL if not connected)
-	CNetClientSession* m_Session;
 
 	/// Turn manager associated with the current game (or NULL if we haven't started the game yet)
 	CNetClientTurnManager* m_ClientTurnManager;

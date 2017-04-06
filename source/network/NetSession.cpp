@@ -32,8 +32,8 @@ const u32 MAXIMUM_HOST_TIMEOUT = std::numeric_limits<u32>::max();
 
 static const int CHANNEL_COUNT = 1;
 
-CNetClientSession::CNetClientSession(CNetClientWorker& client) :
-	m_Client(client), m_FileTransferer(this), m_Server(NULL)
+CNetClientSession::CNetClientSession(CNetClientWorker& client, ENetPeer* peer) :
+	m_Client(client), m_FileTransferer(this), m_Server(NULL), m_Peer(NULL)
 {
 }
 
@@ -121,9 +121,7 @@ void CNetClientSession::Flush()
 
 bool CNetClientSession::SendMessage(const CNetMessage* message)
 {
-	ENSURE(m_Host && m_Server);
-
-	return CNetHost::SendMessage(message, m_Server, "server");
+	return m_Client.SendMessage(m_Peer, message);
 }
 
 u32 CNetClientSession::GetLastReceivedTime() const

@@ -44,15 +44,6 @@
 
 CNetClient *g_NetClient = NULL;
 
-static CStr DebugName(CNetClientSession* session)
-{
-	if (session == NULL)
-		return "[unknown host]";
-	if (session->GetGUID().empty())
-		return "[unauthed host]";
-	return "[" + session->GetGUID().substr(0, 8) + "...]";
-}
-
 static const int CHANNEL_COUNT = 1;
 
 /**
@@ -278,8 +269,11 @@ void CNetClientWorker::Poll()
 	if (!m_Session)
 		return;
 
-	CheckServerConnection();
-	m_Session->Poll();
+	/* This is done in RunStep() now
+	 */
+
+	// CheckServerConnection();
+	// m_Session->Poll();
 }
 
 void* CNetClientWorker::RunThread(void* data)
@@ -342,13 +336,9 @@ bool CNetClientWorker::RunStep()
 
 	ENSURE(m_Host && m_Server);
 
-	m_Session->GetFileTransferer().Poll();
-
-	ENSURE(m_Host && m_Server);
-
 	enet_host_flush(m_Host);
 
-	// m_FileTransferer.Poll();
+	m_Session->GetFileTransferer().Poll();
 
 	CheckServerConnection();
 
@@ -368,7 +358,7 @@ bool CNetClientWorker::RunStep()
 
 			LOGMESSAGE("Net client: Connected to %s:%u", hostname, (unsigned int)event.peer->address.port);
 
-			CNetClientSession* session = new CNetClientSession(*this, event.peer);
+			CNetClientSession* session = new CNetClientSession(*this);
 			SetAndOwnSession(session);
 
 			ENSURE(event.peer->data == NULL);
@@ -529,16 +519,12 @@ void CNetClientWorker::PostPlayerAssignmentsToScript()
 	PushGuiMessage(msg);
 }
 
-bool CNetClientWorker::SendMessage(ENetPeer* peer, const CNetMessage* message)
+bool CNetClientWorker::SendMessage(const CNetMessage* message)
 {
 	if (!m_Session)
 		return false;
 
-	ENSURE(m_Host && m_Server);
-
-	CNetClientSession* session = static_cast<CNetClientSession*>(peer->data);
-
-	return CNetHost::SendMessage(message, peer, DebugName(session).c_str());
+	return m_Session->SendMessage(message);
 }
 
 void CNetClientWorker::HandleConnect()
@@ -567,7 +553,7 @@ void CNetClientWorker::SendGameSetupMessage(JS::MutableHandleValue attrs, Script
 {
 	CGameSetupMessage gameSetup(scriptInterface);
 	gameSetup.m_Data = attrs;
-	m_Session->SendMessage(&gameSetup);
+	SendMessage(&gameSetup);
 }
 
 void CNetClientWorker::SendAssignPlayerMessage(const int playerID, const CStr& guid)
@@ -575,39 +561,39 @@ void CNetClientWorker::SendAssignPlayerMessage(const int playerID, const CStr& g
 	CAssignPlayerMessage assignPlayer;
 	assignPlayer.m_PlayerID = playerID;
 	assignPlayer.m_GUID = guid;
-	m_Session->SendMessage(&assignPlayer);
+	SendMessage(&assignPlayer);
 }
 
 void CNetClientWorker::SendChatMessage(const std::wstring& text)
 {
 	CChatMessage chat;
 	chat.m_Message = text;
-	m_Session->SendMessage(&chat);
+	SendMessage(&chat);
 }
 
 void CNetClientWorker::SendReadyMessage(const int status)
 {
 	CReadyMessage readyStatus;
 	readyStatus.m_Status = status;
-	m_Session->SendMessage(&readyStatus);
+	SendMessage(&readyStatus);
 }
 
 void CNetClientWorker::SendClearAllReadyMessage()
 {
 	CClearAllReadyMessage clearAllReady;
-	m_Session->SendMessage(&clearAllReady);
+	SendMessage(&clearAllReady);
 }
 
 void CNetClientWorker::SendStartGameMessage()
 {
 	CGameStartMessage gameStart;
-	m_Session->SendMessage(&gameStart);
+	SendMessage(&gameStart);
 }
 
 void CNetClientWorker::SendRejoinedMessage()
 {
 	CRejoinedMessage rejoinedMessage;
-	m_Session->SendMessage(&rejoinedMessage);
+	SendMessage(&rejoinedMessage);
 }
 
 void CNetClientWorker::SendKickPlayerMessage(const CStrW& playerName, bool ban)
@@ -615,14 +601,14 @@ void CNetClientWorker::SendKickPlayerMessage(const CStrW& playerName, bool ban)
 	CKickedMessage kickPlayer;
 	kickPlayer.m_Name = playerName;
 	kickPlayer.m_Ban = ban;
-	m_Session->SendMessage(&kickPlayer);
+	SendMessage(&kickPlayer);
 }
 
 void CNetClientWorker::SendPausedMessage(bool pause)
 {
 	CClientPausedMessage pausedMessage;
 	pausedMessage.m_Pause = pause;
-	m_Session->SendMessage(&pausedMessage);
+	SendMessage(&pausedMessage);
 }
 
 bool CNetClientWorker::HandleMessage(CNetMessage* message)
@@ -708,7 +694,7 @@ void CNetClientWorker::LoadFinished()
 
 	CLoadedGameMessage loaded;
 	loaded.m_CurrentTurn = m_ClientTurnManager->GetCurrentTurn();
-	m_Session->SendMessage(&loaded);
+	SendMessage(&loaded);
 }
 
 bool CNetClientWorker::OnConnect(void* context, CFsmEvent* event)

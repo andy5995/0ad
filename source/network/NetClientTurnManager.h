@@ -21,7 +21,7 @@
 #include "simulation2/system/TurnManager.h"
 #include "NetMessage.h"
 
-class CNetClient;
+class CNetClientWorker;
 
 /**
  * Implementation of CTurnManager for network clients.
@@ -30,7 +30,7 @@ class CNetClientTurnManager : public CTurnManager
 {
 	NONCOPYABLE(CNetClientTurnManager);
 public:
-	CNetClientTurnManager(CSimulation2& simulation, CNetClient& client, int clientId, IReplayLogger& replay);
+	CNetClientTurnManager(CSimulation2& simulation, CNetClientWorker& client, int clientId, IReplayLogger& replay);
 
 	void OnSimulationMessage(CSimulationMessage* msg) override;
 
@@ -48,7 +48,7 @@ private:
 
 	void NotifyFinishedUpdate(u32 turn) override;
 
-	CNetClient& m_NetClient;
+	CNetClientWorker& m_NetClient;
 };
 
 #endif // INCLUDED_NETCLIENTTURNMANAGER

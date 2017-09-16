@@ -23,6 +23,7 @@
 #include "network/NetHost.h"
 #include "scriptinterface/ScriptVal.h"
 
+#include "ps/ThreadUtil.h"
 #include "ps/CStr.h"
 
 #include <deque>
@@ -32,8 +33,7 @@ class CNetClientSession;
 class CNetClientTurnManager;
 class CNetServer;
 class ScriptInterface;
-
-typedef struct _ENetHost ENetHost;
+class CNetClientWorker;
 
 // NetClient session FSM states
 enum
@@ -72,19 +72,6 @@ public:
 	virtual ~CNetClient();
 
 	/**
-	 * We assume that adding a tracing function that's only called
-	 * during GC is better for performance than using a
-	 * PersistentRooted<T> where each value needs to be added to
-	 * the root set.
-	 */
-	static void Trace(JSTracer *trc, void *data)
-	{
-		reinterpret_cast<CNetClient*>(data)->TraceMember(trc);
-	}
-
-	void TraceMember(JSTracer *trc);
-
-	/**
 	 * Set the user's name that will be displayed to all players.
 	 * This must not be called after the connection setup.
 	 */
@@ -102,6 +89,109 @@ public:
 	 * @return true on success, false on connection failure
 	 */
 	bool SetupConnection(const CStr& server, const u16 port, ENetHost* enetClient = NULL);
+
+	void SendGameSetupMessage(JS::MutableHandleValue attrs, ScriptInterface& scriptInterface);
+
+	void SendStartGameMessage();
+
+	/**
+	 * Call to kick/ban a client
+	 */
+	void SendKickPlayerMessage(const CStrW& playerName, bool ban);
+
+	void LoadFinished();
+
+	void GuiPoll(JS::MutableHandleValue ret);
+
+	void SendAssignPlayerMessage(const int playerID, const CStr& guid);
+
+	void SendChatMessage(const std::wstring& text);
+
+	void SendReadyMessage(const int status);
+
+	void SendClearAllReadyMessage();
+
+	void SendPausedMessage(bool pause);
+
+	void DestroyConnection();
+
+	void Poll();
+
+	/**
+	 * Flush any queued outgoing network messages.
+	 * This should be called soon after sending a group of messages that may be batched together.
+	 */
+	void Flush();
+
+	std::string TestReadGuiMessages();
+
+		/**
+	 * Get the script interface associated with this network client,
+	 * which is equivalent to the one used by the CGame in the constructor.
+	 */
+	ScriptInterface& GetScriptInterface();
+
+private:
+	CStr m_GUID;
+	CNetClientWorker* m_Worker;
+};
+
+/**
+ * Network client worker thread.
+ *
+ * Thread-safety:
+ *
+ *
+ */
+class CNetClientWorker : public CFsm
+{
+	NONCOPYABLE(CNetClientWorker);
+
+public:
+	/**
+	 * Returns the GUID of the local client.
+	 * Used for distinguishing observers.
+	 */
+	CStr GetGUID() const { return m_GUID; }
+
+	/**
+	 * Send a message to the server.
+	 * @param message message to send
+	 * @return true on success
+	 */
+	bool SendMessage(const CNetMessage* message);
+
+	/**
+	 * Call when the network connection has been successfully initiated.
+	 */
+	void HandleConnect();
+
+	/**
+	 * Call when the network connection has been lost.
+	 */
+	void HandleDisconnect(u32 reason);
+
+	/**
+	 * Call when a message has been received from the network.
+	 */
+	bool HandleMessage(CNetMessage* message);
+
+	/**
+	 * Get the script interface associated with this network client,
+	 * which is equivalent to the one used by the CGame in the constructor.
+	 */
+	ScriptInterface& GetScriptInterface();
+
+private:
+	friend class CNetClient;
+	friend class CNetFileReceiveTask_ClientRejoin;
+
+	CNetClientWorker(CGame* game, bool isLocalClient);
+  ~CNetClientWorker();
+
+	void SetUserName(const CStrW& username);
+
+	bool SetupConnection(const CStr& server, const u16 port);
 
 	/**
 	 * Destroy the connection to the server.
@@ -141,7 +231,7 @@ public:
 	 *
 	 * @return next message, or the value 'undefined' if the queue is empty
 	 */
-	void GuiPoll(JS::MutableHandleValue);
+	void GuiPoll(JS::MutableHandleValue ret);
 
 	/**
 	 * Add a message to the queue, to be read by GuiPoll.
@@ -154,34 +244,6 @@ public:
 	 * for test cases to easily verify the queue contents.
 	 */
 	std::string TestReadGuiMessages();
-
-	/**
-	 * Get the script interface associated with this network client,
-	 * which is equivalent to the one used by the CGame in the constructor.
-	 */
-	ScriptInterface& GetScriptInterface();
-
-	/**
-	 * Send a message to the server.
-	 * @param message message to send
-	 * @return true on success
-	 */
-	bool SendMessage(const CNetMessage* message);
-
-	/**
-	 * Call when the network connection has been successfully initiated.
-	 */
-	void HandleConnect();
-
-	/**
-	 * Call when the network connection has been lost.
-	 */
-	void HandleDisconnect(u32 reason);
-
-	/**
-	 * Call when a message has been received from the network.
-	 */
-	bool HandleMessage(CNetMessage* message);
 
 	/**
 	 * Call when the game has started and all data files have been loaded,
@@ -217,7 +279,6 @@ public:
 	 */
 	void SendPausedMessage(bool pause);
 
-private:
 	// Net message / FSM transition handlers
 	static bool OnConnect(void* context, CFsmEvent* event);
 	static bool OnHandshake(void* context, CFsmEvent* event);
@@ -284,6 +345,22 @@ private:
 
 	/// Time when the server was last checked for timeouts and bad latency
 	std::time_t m_LastConnectionCheck;
+
+		// Thread-related stuff:
+
+	static void* RunThread(void* data);
+	void Run();
+	bool RunStep();
+
+	pthread_t m_WorkerThread;
+	CMutex m_WorkerMutex;
+
+	bool m_Shutdown; // protected by m_WorkerMutex
+
+	// Queues for messages sent by the game thread:
+	std::vector<bool> m_StartGameQueue; // protected by m_WorkerMutex
+	std::vector<std::string> m_GameAttributesQueue; // protected by m_WorkerMutex
+	std::vector<u32> m_TurnLengthQueue; // protected by m_WorkerMutex
 };
 
 /// Global network client for the standard game

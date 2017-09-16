@@ -46,7 +46,7 @@ class CNetFileReceiveTask_ClientRejoin : public CNetFileReceiveTask
 {
 	NONCOPYABLE(CNetFileReceiveTask_ClientRejoin);
 public:
-	CNetFileReceiveTask_ClientRejoin(CNetClient& client)
+	CNetFileReceiveTask_ClientRejoin(CNetClientWorker& client)
 		: m_Client(client)
 	{
 	}
@@ -64,10 +64,10 @@ public:
 	}
 
 private:
-	CNetClient& m_Client;
+	CNetClientWorker& m_Client;
 };
 
-CNetClient::CNetClient(CGame* game, bool isLocalClient) :
+CNetClientWorker::CNetClientWorker(CGame* game, bool isLocalClient) :
 	m_Session(NULL),
 	m_UserName(L"anonymous"),
 	m_GUID(ps_generate_guid()), m_HostID((u32)-1), m_ClientTurnManager(NULL), m_Game(game),
@@ -80,9 +80,7 @@ CNetClient::CNetClient(CGame* game, bool isLocalClient) :
 
 	void* context = this;
 
-	JS_AddExtraGCRootsTracer(GetScriptInterface().GetJSRuntime(), CNetClient::Trace, this);
-
-	// Set up transitions for session
+		// Set up transitions for session
 	AddTransition(NCS_UNCONNECTED, (uint)NMT_CONNECT_COMPLETE, NCS_CONNECT, (void*)&OnConnect, context);
 
 	AddTransition(NCS_CONNECT, (uint)NMT_SERVER_HANDSHAKE, NCS_HANDSHAKE, (void*)&OnHandshake, context);
@@ -140,40 +138,67 @@ CNetClient::CNetClient(CGame* game, bool isLocalClient) :
 	SetFirstState(NCS_UNCONNECTED);
 }
 
-CNetClient::~CNetClient()
+CNetClientWorker::~CNetClientWorker()
 {
 	DestroyConnection();
-	JS_RemoveExtraGCRootsTracer(GetScriptInterface().GetJSRuntime(), CNetClient::Trace, this);
+
+	/*	if (m_State != SERVER_STATE_UNCONNECTED)
+	{
+		// Tell the thread to shut down
+		{
+			CScopeLock lock(m_WorkerMutex);
+			m_Shutdown = true;
+		}
+
+		// Wait for it to shut down cleanly
+		pthread_join(m_WorkerThread, NULL);
+	}
+
+	// Clean up resources
+
+	delete m_Stats;
+
+	for (CNetServerSession* session : m_Sessions)
+	{
+		session->DisconnectNow(NDR_SERVER_SHUTDOWN);
+		delete session;
+	}
+
+	if (m_Host)
+		enet_host_destroy(m_Host);
+
+	delete m_ServerTurnManager; */
 }
 
-void CNetClient::TraceMember(JSTracer *trc)
-{
-	for (JS::Heap<JS::Value>& guiMessage : m_GuiMessageQueue)
-		JS_CallValueTracer(trc, &guiMessage, "m_GuiMessageQueue");
-}
-
-void CNetClient::SetUserName(const CStrW& username)
+void CNetClientWorker::SetUserName(const CStrW& username)
 {
 	ENSURE(!m_Session); // must be called before we start the connection
 
 	m_UserName = username;
 }
 
-bool CNetClient::SetupConnection(const CStr& server, const u16 port, ENetHost* enetClient)
+bool CNetClientWorker::SetupConnection(const CStr& server, const u16 port)
 {
 	CNetClientSession* session = new CNetClientSession(*this);
 	bool ok = session->Connect(server, port, m_IsLocalClient, enetClient);
 	SetAndOwnSession(session);
+
+	//m_State = SERVER_STATE_PREGAME;
+
+	// Launch the worker thread
+	int ret = pthread_create(&m_WorkerThread, NULL, &RunThread, this);
+	ENSURE(ret == 0);
+
 	return ok;
 }
 
-void CNetClient::SetAndOwnSession(CNetClientSession* session)
+void CNetClientWorker::SetAndOwnSession(CNetClientSession* session)
 {
 	delete m_Session;
 	m_Session = session;
 }
 
-void CNetClient::DestroyConnection()
+void CNetClientWorker::DestroyConnection()
 {
 	// Send network messages from the current frame before connection is destroyed.
 	if (m_ClientTurnManager)
@@ -184,7 +209,7 @@ void CNetClient::DestroyConnection()
 	SAFE_DELETE(m_Session);
 }
 
-void CNetClient::Poll()
+void CNetClientWorker::Poll()
 {
 	if (!m_Session)
 		return;
@@ -193,7 +218,46 @@ void CNetClient::Poll()
 	m_Session->Poll();
 }
 
-void CNetClient::CheckServerConnection()
+void* CNetClientWorker::RunThread(void* data)
+{
+	debug_SetThreadName("NetClient");
+
+	static_cast<CNetClientWorker*>(data)->Run();
+
+	return NULL;
+}
+
+void CNetClientWorker::Run()
+{
+	// The script runtime uses the profiler and therefore the thread must be registered before the runtime is created
+	g_Profiler2.RegisterCurrentThread("Net client");
+
+	while (true)
+	{
+		if (!RunStep())
+			break;
+
+		// Implement autostart mode
+		//if (m_State == CLIENT_STATE_PREGAME && (int)m_PlayerAssignments.size() == m_AutostartPlayers)
+		//	StartGame();
+
+		// Update profiler stats
+		//m_Stats->LatchHostState(m_Host);
+	}
+}
+
+bool CNetClientWorker::RunStep()
+{
+	// Check for messages from the game thread.
+	// (Do as little work as possible while the mutex is held open,
+	// to avoid performance problems and deadlocks.)
+
+	CheckServerConnection();
+
+	return true;
+}
+
+void CNetClientWorker::CheckServerConnection()
 {
 	// Trigger local warnings if the connection to the server is bad.
 	// At most once per second.
@@ -228,13 +292,13 @@ void CNetClient::CheckServerConnection()
 	}
 }
 
-void CNetClient::Flush()
+void CNetClientWorker::Flush()
 {
 	if (m_Session)
 		m_Session->Flush();
 }
 
-void CNetClient::GuiPoll(JS::MutableHandleValue ret)
+void CNetClientWorker::GuiPoll(JS::MutableHandleValue ret)
 {
 	if (m_GuiMessageQueue.empty())
 	{
@@ -246,14 +310,14 @@ void CNetClient::GuiPoll(JS::MutableHandleValue ret)
 	m_GuiMessageQueue.pop_front();
 }
 
-void CNetClient::PushGuiMessage(const JS::HandleValue message)
+void CNetClientWorker::PushGuiMessage(const JS::HandleValue message)
 {
 	ENSURE(!message.isUndefined());
 
 	m_GuiMessageQueue.push_back(JS::Heap<JS::Value>(message));
 }
 
-std::string CNetClient::TestReadGuiMessages()
+std::string CNetClientWorker::TestReadGuiMessages()
 {
 	JSContext* cx = GetScriptInterface().GetContext();
 	JSAutoRequest rq(cx);
@@ -270,12 +334,12 @@ std::string CNetClient::TestReadGuiMessages()
 	return r;
 }
 
-ScriptInterface& CNetClient::GetScriptInterface()
+ScriptInterface& CNetClientWorker::GetScriptInterface()
 {
 	return m_Game->GetSimulation2()->GetScriptInterface();
 }
 
-void CNetClient::PostPlayerAssignmentsToScript()
+void CNetClientWorker::PostPlayerAssignmentsToScript()
 {
 	JSContext* cx = GetScriptInterface().GetContext();
 	JSAutoRequest rq(cx);
@@ -299,7 +363,7 @@ void CNetClient::PostPlayerAssignmentsToScript()
 	PushGuiMessage(msg);
 }
 
-bool CNetClient::SendMessage(const CNetMessage* message)
+bool CNetClientWorker::SendMessage(const CNetMessage* message)
 {
 	if (!m_Session)
 		return false;
@@ -307,12 +371,12 @@ bool CNetClient::SendMessage(const CNetMessage* message)
 	return m_Session->SendMessage(message);
 }
 
-void CNetClient::HandleConnect()
+void CNetClientWorker::HandleConnect()
 {
 	Update((uint)NMT_CONNECT_COMPLETE, NULL);
 }
 
-void CNetClient::HandleDisconnect(u32 reason)
+void CNetClientWorker::HandleDisconnect(u32 reason)
 {
 	JSContext* cx = GetScriptInterface().GetContext();
 	JSAutoRequest rq(cx);
@@ -329,14 +393,14 @@ void CNetClient::HandleDisconnect(u32 reason)
 	SetCurrState(NCS_UNCONNECTED);
 }
 
-void CNetClient::SendGameSetupMessage(JS::MutableHandleValue attrs, ScriptInterface& scriptInterface)
+void CNetClientWorker::SendGameSetupMessage(JS::MutableHandleValue attrs, ScriptInterface& scriptInterface)
 {
 	CGameSetupMessage gameSetup(scriptInterface);
 	gameSetup.m_Data = attrs;
 	SendMessage(&gameSetup);
 }
 
-void CNetClient::SendAssignPlayerMessage(const int playerID, const CStr& guid)
+void CNetClientWorker::SendAssignPlayerMessage(const int playerID, const CStr& guid)
 {
 	CAssignPlayerMessage assignPlayer;
 	assignPlayer.m_PlayerID = playerID;
@@ -344,39 +408,39 @@ void CNetClient::SendAssignPlayerMessage(const int playerID, const CStr& guid)
 	SendMessage(&assignPlayer);
 }
 
-void CNetClient::SendChatMessage(const std::wstring& text)
+void CNetClientWorker::SendChatMessage(const std::wstring& text)
 {
 	CChatMessage chat;
 	chat.m_Message = text;
 	SendMessage(&chat);
 }
 
-void CNetClient::SendReadyMessage(const int status)
+void CNetClientWorker::SendReadyMessage(const int status)
 {
 	CReadyMessage readyStatus;
 	readyStatus.m_Status = status;
 	SendMessage(&readyStatus);
 }
 
-void CNetClient::SendClearAllReadyMessage()
+void CNetClientWorker::SendClearAllReadyMessage()
 {
 	CClearAllReadyMessage clearAllReady;
 	SendMessage(&clearAllReady);
 }
 
-void CNetClient::SendStartGameMessage()
+void CNetClientWorker::SendStartGameMessage()
 {
 	CGameStartMessage gameStart;
 	SendMessage(&gameStart);
 }
 
-void CNetClient::SendRejoinedMessage()
+void CNetClientWorker::SendRejoinedMessage()
 {
 	CRejoinedMessage rejoinedMessage;
 	SendMessage(&rejoinedMessage);
 }
 
-void CNetClient::SendKickPlayerMessage(const CStrW& playerName, bool ban)
+void CNetClientWorker::SendKickPlayerMessage(const CStrW& playerName, bool ban)
 {
 	CKickedMessage kickPlayer;
 	kickPlayer.m_Name = playerName;
@@ -384,14 +448,14 @@ void CNetClient::SendKickPlayerMessage(const CStrW& playerName, bool ban)
 	SendMessage(&kickPlayer);
 }
 
-void CNetClient::SendPausedMessage(bool pause)
+void CNetClientWorker::SendPausedMessage(bool pause)
 {
 	CClientPausedMessage pausedMessage;
 	pausedMessage.m_Pause = pause;
 	SendMessage(&pausedMessage);
 }
 
-bool CNetClient::HandleMessage(CNetMessage* message)
+bool CNetClientWorker::HandleMessage(CNetMessage* message)
 {
 	// Handle non-FSM messages first
 
@@ -434,7 +498,7 @@ bool CNetClient::HandleMessage(CNetMessage* message)
 	return ok;
 }
 
-void CNetClient::LoadFinished()
+void CNetClientWorker::LoadFinished()
 {
 	JSContext* cx = GetScriptInterface().GetContext();
 	JSAutoRequest rq(cx);
@@ -477,11 +541,11 @@ void CNetClient::LoadFinished()
 	SendMessage(&loaded);
 }
 
-bool CNetClient::OnConnect(void* context, CFsmEvent* event)
+bool CNetClientWorker::OnConnect(void* context, CFsmEvent* event)
 {
 	ENSURE(event->GetType() == (uint)NMT_CONNECT_COMPLETE);
 
-	CNetClient* client = (CNetClient*)context;
+	CNetClientWorker* client = (CNetClientWorker*)context;
 
 	JSContext* cx = client->GetScriptInterface().GetContext();
 	JSAutoRequest rq(cx);
@@ -493,11 +557,11 @@ bool CNetClient::OnConnect(void* context, CFsmEvent* event)
 	return true;
 }
 
-bool CNetClient::OnHandshake(void* context, CFsmEvent* event)
+bool CNetClientWorker::OnHandshake(void* context, CFsmEvent* event)
 {
 	ENSURE(event->GetType() == (uint)NMT_SERVER_HANDSHAKE);
 
-	CNetClient* client = (CNetClient*)context;
+	CNetClientWorker* client = (CNetClientWorker*)context;
 
 	CCliHandshakeMessage handshake;
 	handshake.m_MagicResponse = PS_PROTOCOL_MAGIC_RESPONSE;
@@ -508,11 +572,11 @@ bool CNetClient::OnHandshake(void* context, CFsmEvent* event)
 	return true;
 }
 
-bool CNetClient::OnHandshakeResponse(void* context, CFsmEvent* event)
+bool CNetClientWorker::OnHandshakeResponse(void* context, CFsmEvent* event)
 {
 	ENSURE(event->GetType() == (uint)NMT_SERVER_HANDSHAKE_RESPONSE);
 
-	CNetClient* client = (CNetClient*)context;
+	CNetClientWorker* client = (CNetClientWorker*)context;
 
 	CAuthenticateMessage authenticate;
 	authenticate.m_GUID = client->m_GUID;
@@ -524,11 +588,11 @@ bool CNetClient::OnHandshakeResponse(void* context, CFsmEvent* event)
 	return true;
 }
 
-bool CNetClient::OnAuthenticate(void* context, CFsmEvent* event)
+bool CNetClientWorker::OnAuthenticate(void* context, CFsmEvent* event)
 {
 	ENSURE(event->GetType() == (uint)NMT_AUTHENTICATE_RESULT);
 
-	CNetClient* client = (CNetClient*)context;
+	CNetClientWorker* client = (CNetClientWorker*)context;
 
 	JSContext* cx = client->GetScriptInterface().GetContext();
 	JSAutoRequest rq(cx);
@@ -548,11 +612,11 @@ bool CNetClient::OnAuthenticate(void* context, CFsmEvent* event)
 	return true;
 }
 
-bool CNetClient::OnChat(void* context, CFsmEvent* event)
+bool CNetClientWorker::OnChat(void* context, CFsmEvent* event)
 {
 	ENSURE(event->GetType() == (uint)NMT_CHAT);
 
-	CNetClient* client = (CNetClient*)context;
+	CNetClientWorker* client = (CNetClientWorker*)context;
 	JSContext* cx = client->GetScriptInterface().GetContext();
 	JSAutoRequest rq(cx);
 
@@ -567,11 +631,11 @@ bool CNetClient::OnChat(void* context, CFsmEvent* event)
 	return true;
 }
 
-bool CNetClient::OnReady(void* context, CFsmEvent* event)
+bool CNetClientWorker::OnReady(void* context, CFsmEvent* event)
 {
 	ENSURE(event->GetType() == (uint)NMT_READY);
 
-	CNetClient* client = (CNetClient*)context;
+	CNetClientWorker* client = (CNetClientWorker*)context;
 	JSContext* cx = client->GetScriptInterface().GetContext();
 	JSAutoRequest rq(cx);
 
@@ -586,11 +650,11 @@ bool CNetClient::OnReady(void* context, CFsmEvent* event)
 	return true;
 }
 
-bool CNetClient::OnGameSetup(void* context, CFsmEvent* event)
+bool CNetClientWorker::OnGameSetup(void* context, CFsmEvent* event)
 {
 	ENSURE(event->GetType() == (uint)NMT_GAME_SETUP);
 
-	CNetClient* client = (CNetClient*)context;
+	CNetClientWorker* client = (CNetClientWorker*)context;
 	JSContext* cx = client->GetScriptInterface().GetContext();
 	JSAutoRequest rq(cx);
 
@@ -606,11 +670,11 @@ bool CNetClient::OnGameSetup(void* context, CFsmEvent* event)
 	return true;
 }
 
-bool CNetClient::OnPlayerAssignment(void* context, CFsmEvent* event)
+bool CNetClientWorker::OnPlayerAssignment(void* context, CFsmEvent* event)
 {
 	ENSURE(event->GetType() == (uint)NMT_PLAYER_ASSIGNMENT);
 
-	CNetClient* client = (CNetClient*)context;
+	CNetClientWorker* client = (CNetClientWorker*)context;
 
 	CPlayerAssignmentMessage* message = (CPlayerAssignmentMessage*)event->GetParamRef();
 
@@ -633,11 +697,11 @@ bool CNetClient::OnPlayerAssignment(void* context, CFsmEvent* event)
 	return true;
 }
 
-bool CNetClient::OnGameStart(void* context, CFsmEvent* event)
+bool CNetClientWorker::OnGameStart(void* context, CFsmEvent* event)
 {
 	ENSURE(event->GetType() == (uint)NMT_GAME_START);
 
-	CNetClient* client = (CNetClient*)context;
+	CNetClientWorker* client = (CNetClientWorker*)context;
 	JSContext* cx = client->GetScriptInterface().GetContext();
 	JSAutoRequest rq(cx);
 
@@ -659,11 +723,11 @@ bool CNetClient::OnGameStart(void* context, CFsmEvent* event)
 	return true;
 }
 
-bool CNetClient::OnJoinSyncStart(void* context, CFsmEvent* event)
+bool CNetClientWorker::OnJoinSyncStart(void* context, CFsmEvent* event)
 {
 	ENSURE(event->GetType() == (uint)NMT_JOIN_SYNC_START);
 
-	CNetClient* client = (CNetClient*)context;
+	CNetClientWorker* client = (CNetClientWorker*)context;
 
 	// The server wants us to start downloading the game state from it, so do so
 	client->m_Session->GetFileTransferer().StartTask(
@@ -673,11 +737,11 @@ bool CNetClient::OnJoinSyncStart(void* context, CFsmEvent* event)
 	return true;
 }
 
-bool CNetClient::OnJoinSyncEndCommandBatch(void* context, CFsmEvent* event)
+bool CNetClientWorker::OnJoinSyncEndCommandBatch(void* context, CFsmEvent* event)
 {
 	ENSURE(event->GetType() == (uint)NMT_END_COMMAND_BATCH);
 
-	CNetClient* client = (CNetClient*)context;
+	CNetClientWorker* client = (CNetClientWorker*)context;
 
 	CEndCommandBatchMessage* endMessage = (CEndCommandBatchMessage*)event->GetParamRef();
 
@@ -689,11 +753,11 @@ bool CNetClient::OnJoinSyncEndCommandBatch(void* context, CFsmEvent* event)
 	return true;
 }
 
-bool CNetClient::OnRejoined(void* context, CFsmEvent* event)
+bool CNetClientWorker::OnRejoined(void* context, CFsmEvent* event)
 {
 	ENSURE(event->GetType() == (uint)NMT_REJOINED);
 
-	CNetClient* client = (CNetClient*)context;
+	CNetClientWorker* client = (CNetClientWorker*)context;
 	JSContext* cx = client->GetScriptInterface().GetContext();
 	JSAutoRequest rq(cx);
 
@@ -706,11 +770,11 @@ bool CNetClient::OnRejoined(void* context, CFsmEvent* event)
 	return true;
 }
 
-bool CNetClient::OnKicked(void *context, CFsmEvent* event)
+bool CNetClientWorker::OnKicked(void *context, CFsmEvent* event)
 {
 	ENSURE(event->GetType() == (uint)NMT_KICKED);
 
-	CNetClient* client = (CNetClient*)context;
+	CNetClientWorker* client = (CNetClientWorker*)context;
 	JSContext* cx = client->GetScriptInterface().GetContext();
 	JSAutoRequest rq(cx);
 
@@ -726,13 +790,13 @@ bool CNetClient::OnKicked(void *context, CFsmEvent* event)
 	return true;
 }
 
-bool CNetClient::OnClientTimeout(void *context, CFsmEvent* event)
+bool CNetClientWorker::OnClientTimeout(void *context, CFsmEvent* event)
 {
 	// Report the timeout of some other client
 
 	ENSURE(event->GetType() == (uint)NMT_CLIENT_TIMEOUT);
 
-	CNetClient* client = (CNetClient*)context;
+	CNetClientWorker* client = (CNetClientWorker*)context;
 	JSContext* cx = client->GetScriptInterface().GetContext();
 	JSAutoRequest rq(cx);
 
@@ -750,13 +814,13 @@ bool CNetClient::OnClientTimeout(void *context, CFsmEvent* event)
 	return true;
 }
 
-bool CNetClient::OnClientPerformance(void *context, CFsmEvent* event)
+bool CNetClientWorker::OnClientPerformance(void *context, CFsmEvent* event)
 {
 	// Performance statistics for one or multiple clients
 
 	ENSURE(event->GetType() == (uint)NMT_CLIENT_PERFORMANCE);
 
-	CNetClient* client = (CNetClient*)context;
+	CNetClientWorker* client = (CNetClientWorker*)context;
 	JSContext* cx = client->GetScriptInterface().GetContext();
 	JSAutoRequest rq(cx);
 
@@ -781,7 +845,7 @@ bool CNetClient::OnClientPerformance(void *context, CFsmEvent* event)
 	return true;
 }
 
-bool CNetClient::OnClientsLoading(void *context, CFsmEvent *event)
+bool CNetClientWorker::OnClientsLoading(void *context, CFsmEvent *event)
 {
 	ENSURE(event->GetType() == (uint)NMT_CLIENTS_LOADING);
 
@@ -792,7 +856,7 @@ bool CNetClient::OnClientsLoading(void *context, CFsmEvent *event)
 	for (const CClientsLoadingMessage::S_m_Clients& client : message->m_Clients)
 		guids.push_back(client.m_GUID);
 
-	CNetClient* client = (CNetClient*)context;
+	CNetClientWorker* client = (CNetClientWorker*)context;
 	JSContext* cx = client->GetScriptInterface().GetContext();
 	JSAutoRequest rq(cx);
 
@@ -803,11 +867,11 @@ bool CNetClient::OnClientsLoading(void *context, CFsmEvent *event)
 	return true;
 }
 
-bool CNetClient::OnClientPaused(void *context, CFsmEvent *event)
+bool CNetClientWorker::OnClientPaused(void *context, CFsmEvent *event)
 {
 	ENSURE(event->GetType() == (uint)NMT_CLIENT_PAUSED);
 
-	CNetClient* client = (CNetClient*)context;
+	CNetClientWorker* client = (CNetClientWorker*)context;
 	JSContext* cx = client->GetScriptInterface().GetContext();
 	JSAutoRequest rq(cx);
 
@@ -822,11 +886,11 @@ bool CNetClient::OnClientPaused(void *context, CFsmEvent *event)
 	return true;
 }
 
-bool CNetClient::OnLoadedGame(void* context, CFsmEvent* event)
+bool CNetClientWorker::OnLoadedGame(void* context, CFsmEvent* event)
 {
 	ENSURE(event->GetType() == (uint)NMT_LOADED_GAME);
 
-	CNetClient* client = (CNetClient*)context;
+	CNetClientWorker* client = (CNetClientWorker*)context;
 	JSContext* cx = client->GetScriptInterface().GetContext();
 	JSAutoRequest rq(cx);
 
@@ -845,11 +909,11 @@ bool CNetClient::OnLoadedGame(void* context, CFsmEvent* event)
 	return true;
 }
 
-bool CNetClient::OnInGame(void *context, CFsmEvent* event)
+bool CNetClientWorker::OnInGame(void *context, CFsmEvent* event)
 {
 	// TODO: should split each of these cases into a separate method
 
-	CNetClient* client = (CNetClient*)context;
+	CNetClientWorker* client = (CNetClientWorker*)context;
 
 	CNetMessage* message = (CNetMessage*)event->GetParamRef();
 	if (message)
@@ -873,3 +937,102 @@ bool CNetClient::OnInGame(void *context, CFsmEvent* event)
 
 	return true;
 }
+
+CNetClient::CNetClient(CGame* game, bool isLocalClient) :
+	m_Worker(new CNetClientWorker(game, isLocalClient))
+{
+}
+
+CNetClient::~CNetClient()
+{
+	delete m_Worker;
+}
+
+void CNetClient::SetUserName(const CStrW& username)
+{
+	m_Worker->m_UserName = username;
+}
+
+bool CNetClient::SetupConnection(const CStr& server, const u16 port)
+{
+	return m_Worker->SetupConnection(server, port);
+}
+
+void CNetClient::SendGameSetupMessage(JS::MutableHandleValue attrs, ScriptInterface& scriptInterface)
+{
+	m_Worker->SendGameSetupMessage(attrs, scriptInterface);
+}
+
+void CNetClient::SendStartGameMessage()
+{
+	m_Worker->SendStartGameMessage();
+}
+
+/**
+ * Call to kick/ban a client
+ */
+void CNetClient::SendKickPlayerMessage(const CStrW& playerName, bool ban)
+{
+	m_Worker->SendKickPlayerMessage(playerName, ban);
+}
+
+void CNetClient::LoadFinished()
+{
+	m_Worker->LoadFinished();
+}
+
+void CNetClient::GuiPoll(JS::MutableHandleValue ret)
+{
+	m_Worker->GuiPoll(ret);
+}
+
+ScriptInterface& CNetClient::GetScriptInterface()
+{
+	return m_Worker->GetScriptInterface();
+}
+
+void CNetClient::SendAssignPlayerMessage(const int playerID, const CStr& guid)
+{
+	m_Worker->SendAssignPlayerMessage(playerID, guid);
+}
+
+void CNetClient::SendChatMessage(const std::wstring& text)
+{
+	m_Worker->SendChatMessage(text);
+}
+
+void CNetClient::SendReadyMessage(const int status)
+{
+	m_Worker->SendReadyMessage(status);
+}
+
+void CNetClient::SendClearAllReadyMessage()
+{
+	m_Worker->SendClearAllReadyMessage();
+}
+
+void CNetClient::SendPausedMessage(bool pause)
+{
+	m_Worker->SendPausedMessage(pause);
+}
+
+void CNetClient::DestroyConnection()
+{
+	m_Worker->DestroyConnection();
+}
+
+void CNetClient::Poll()
+{
+	m_Worker->Poll();
+}
+
+void CNetClient::Flush()
+{
+	m_Worker->Flush();
+}
+
+std::string CNetClient::TestReadGuiMessages()
+{
+	return m_Worker->TestReadGuiMessages();
+}
+

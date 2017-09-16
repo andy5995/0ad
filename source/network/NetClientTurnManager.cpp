@@ -35,7 +35,7 @@
 
 extern CStrW g_UniqueLogPostfix;
 
-CNetClientTurnManager::CNetClientTurnManager(CSimulation2& simulation, CNetClient& client, int clientId, IReplayLogger& replay)
+CNetClientTurnManager::CNetClientTurnManager(CSimulation2& simulation, CNetClientWorker& client, int clientId, IReplayLogger& replay)
 	: CTurnManager(simulation, DEFAULT_TURN_LENGTH_MP, clientId, replay), m_NetClient(client)
 {
 }

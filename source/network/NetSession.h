@@ -34,7 +34,7 @@ extern const u32 NETWORK_WARNING_TIMEOUT;
  */
 extern const u32 MAXIMUM_HOST_TIMEOUT;
 
-class CNetClient;
+class CNetClientWorker;
 class CNetServerWorker;
 
 class CNetStatsTable;
@@ -69,7 +69,7 @@ class CNetClientSession : public INetSession
 	NONCOPYABLE(CNetClientSession);
 
 public:
-	CNetClientSession(CNetClient& client);
+	CNetClientSession(CNetClientWorker& client);
 	~CNetClientSession();
 
 	bool Connect(const CStr& server, const u16 port, const bool isLocalClient, ENetHost* enetClient);
@@ -108,7 +108,7 @@ public:
 	CNetFileTransferer& GetFileTransferer() { return m_FileTransferer; }
 
 private:
-	CNetClient& m_Client;
+	CNetClientWorker& m_Client;
 
 	CNetFileTransferer m_FileTransferer;
 

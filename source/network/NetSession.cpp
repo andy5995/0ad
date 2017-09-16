@@ -32,7 +32,7 @@ const u32 MAXIMUM_HOST_TIMEOUT = std::numeric_limits<u32>::max();
 
 static const int CHANNEL_COUNT = 1;
 
-CNetClientSession::CNetClientSession(CNetClient& client) :
+CNetClientSession::CNetClientSession(CNetClientWorker& client) :
 	m_Client(client), m_FileTransferer(this), m_Host(NULL), m_Server(NULL), m_Stats(NULL)
 {
 }

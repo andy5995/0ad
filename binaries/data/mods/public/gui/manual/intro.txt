@@ -74,9 +74,9 @@ Alt + /: Select all idle fighters
 . (Period): Select idle worker (including citizen soldiers)
 Shift + .: Add idle worker to selection (including citizen soldiers)
 Alt + .: Select all idle workers (including citizen soldiers)
-\ (BackSlash): Select idle unit
-Shift + \: Add idle unit to selection
-Alt + \: Select all idle units
+\\ (BackSlash): Select idle unit
+Shift + \\: Add idle unit to selection
+Alt + \\: Select all idle units
 H: Stop (halt) the currently selected units.
 Y: The unit will go back to work
 U: Unload the garrisoned units of the selected buildings
@@ -114,7 +114,7 @@ Right Click with a building/buildings selected: sets a rally point for units cre
 Ctrl + Right Click with units selected:
     - If the cursor is over an allied structure: Garrison
     - If the cursor is over a non-allied unit or building: Attack (instead of capture or gather)
-    - Otherwise: Attack move (by default all enemy units and structures along the way are targeted, use Ctrl + Q + Right Click to target only units). 
+    - Otherwise: Attack move (by default all enemy units and structures along the way are targeted, use Ctrl + Q + Right Click to target only units).
 
 [font="sans-bold-14"]Overlays
 [font="sans-14"]Alt + G: Hide/show the GUI

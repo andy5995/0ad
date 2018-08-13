@@ -1,9 +1,12 @@
 #!/bin/sh
 
-if [ "$(id -u)" = "0" ]; then
-   echo "Running as root will mess up file permissions. Aborting ..." 1>&2
-   exit 1
-fi
+#export CXXFLAGS=-D_FILE_OFFSET_BITS=64
+#export CFLAGS=-D_FILE_OFFSET_BITS=64
+
+#if [ "$(id -u)" = "0" ]; then
+#   echo "Running as root will mess up file permissions. Aborting ..." 1>&2
+#   exit 1
+#fi
 
 die()
 {

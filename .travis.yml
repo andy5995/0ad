@@ -11,7 +11,7 @@ matrix:
 
 script:
   - cd libraries/osx
-  - ./build-osx-bundle.sh
+  - ./build-osx-libs.sh
   - cd ../../build/workspaces
   - ./update-workspaces.sh --disable-atlas
   - cd gcc

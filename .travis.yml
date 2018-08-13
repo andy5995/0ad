@@ -14,7 +14,7 @@ matrix:
 
 before_install:
   - if [ "$TRAVIS_OS_NAME" = "osx" ]; then brew update; fi
-  - if [ "$TRAVIS_OS_NAME" = "osx" ]; then brew install boost curl enet libogg glew gloox icu4c libogg libpng libsodium libvorbis libiconv libxml2 miniupnpc sdl2 wxWidgets zlib; fi
+  - if [ "$TRAVIS_OS_NAME" = "osx" ]; then brew install enet libogg glew gloox libogg libsodium libvorbis libxml2 miniupnpc sdl2 wxWidgets; fi
   - if [ "$TRAVIS_OS_NAME" = "osx" ]; then brew outdated cmake || brew upgrade cmake; brew outdated pkgconfig || brew upgrade pkgconfig; fi
   - if [ "$TRAVIS_OS_NAME" = "osx" ]; then brew link --force gettext; fi
 

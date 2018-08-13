@@ -10,8 +10,9 @@ matrix:
       env: Tr_Xcode_Version="9.3beta"
 
 script:
-  - cd build/workspaces
+  - cd libraries/osx
   - ./build-osx-bundle.sh
+  - cd ../../build/workspaces
   - ./update-workspaces.sh --disable-atlas
   - cd gcc
   - make

@@ -20,7 +20,7 @@ before_install:
   - if [ "$TRAVIS_OS_NAME" = "osx" ]; then brew update; fi
   - if [ "$TRAVIS_OS_NAME" = "osx" ]; then brew install enet libogg glew gloox libogg libsodium libvorbis libxml2 miniupnpc sdl2; fi
   - if [ "$TRAVIS_OS_NAME" = "osx" ]; then brew outdated cmake || brew upgrade cmake; brew outdated pkgconfig || brew upgrade pkgconfig; fi
-  - if [ "$TRAVIS_OS_NAME" = "linux"; then ./.travis_before_install.sh
+  - if [ "$TRAVIS_OS_NAME" = "linux" ]; then ./.travis_before_install.sh; fi
 script:
   - cd build/workspaces
   - ./update-workspaces.sh --disable-atlas

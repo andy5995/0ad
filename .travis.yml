@@ -7,13 +7,13 @@ matrix:
   include:
     - os: linux
       compiler: gcc
-      addons:
-        apt:
-          packages:
-          - gcc-5
-          - g++-5
-      env: Tr_Compiler_Version="5"
-      dist: trusty
+#      addons:
+#        apt:
+#          packages:
+#          - gcc-5
+#          - g++-5
+#      env: Tr_Compiler_Version="unknown"
+      dist: precise
     - os: linux
       compiler: gcc
       addons:

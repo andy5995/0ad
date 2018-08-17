@@ -22,7 +22,5 @@ before_install:
   - if [ "$TRAVIS_OS_NAME" = "osx" ]; then brew outdated cmake || brew upgrade cmake; brew outdated pkgconfig || brew upgrade pkgconfig; fi
   - if [ "$TRAVIS_OS_NAME" = "linux" ]; then ./.travis_before_install.sh; fi
 script:
-  - cd build/workspaces
-  - ./update-workspaces.sh --disable-atlas
-  - cd gcc
-  - make
+  - build/workspaces/update-workspaces.sh
+  - make -C gcc

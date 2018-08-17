@@ -9,6 +9,10 @@ matrix:
       compiler: gcc
       env: Tr_Compiler_Version="7"
       dist: trusty
+    - os: linux
+      compiler: clang
+      env: Tr_Compiler_Version="7"
+      dist: trusty
 #    - os: osx
 #      osx_image: xcode9.2
 #      env: Tr_Xcode_Version="9.2"
@@ -23,4 +27,4 @@ before_install:
   - if [ "$TRAVIS_OS_NAME" = "linux" ]; then ./.travis_before_install.sh; fi
 script:
   - build/workspaces/update-workspaces.sh
-  - make -C gcc
+  - make -C build/workspaces/gcc

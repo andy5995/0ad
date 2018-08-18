@@ -27,7 +27,7 @@ matrix:
       dist: trusty
     - os: linux
       compiler: gcc
-      env: Tr_Compiler_Version="7"
+      env: Compiler_Version="7"
       dist: trusty
     - os: linux
       compiler: gcc
@@ -42,7 +42,7 @@ matrix:
       dist: trusty
     - os: linux
       compiler: clang
-      env: Tr_Compiler_Version="5"
+      env: Compiler_Version="5"
       dist: trusty
 #    - os: linux
 #      compiler: clang

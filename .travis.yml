@@ -22,6 +22,15 @@ matrix:
       compiler: clang
       env: Tr_Compiler_Version="5.0"
       dist: trusty
+    - os: linux
+      compiler: gcc
+      addons:
+        apt:
+          sources:
+          - ubuntu-toolchain-r-test
+          packages:
+          - gcc-6
+      env: Tr_Compiler_Version="6"
 #    - os: linux
 #      compiler: clang
 #      addons:

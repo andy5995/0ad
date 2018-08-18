@@ -21,6 +21,8 @@ mkdir gloox
 wget https://camaya.net/download/gloox-1.0.21.tar.bz2
 tar xf gloox-1.0.21.tar.bz2
 cd gloox-1.0.21
-./configure
+
+# reduce travis log by outputting to /dev/null
+./configure > /dev/null
 make > /dev/null && sudo make install
-cd cd ../..
+cd ../..

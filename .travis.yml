@@ -43,5 +43,5 @@ before_install:
   - if [ "$TRAVIS_OS_NAME" = "osx" ]; then brew outdated cmake || brew upgrade cmake; brew outdated pkgconfig || brew upgrade pkgconfig; fi
   - if [ "$TRAVIS_OS_NAME" = "linux" ]; then ./.travis_before_install.sh; fi
 script:
-  - build/workspaces/update-workspaces.sh
+  - build/workspaces/update-workspaces.sh --with-system-nvtt
   - make -C build/workspaces/gcc

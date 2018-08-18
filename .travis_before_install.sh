@@ -10,7 +10,17 @@ sudo apt-get install -y libsodium-dev
 sudo apt-get install libegl1-mesa-dev libgles2-mesa-dev
 
 sudo apt-get install libboost-dev libboost-filesystem-dev   \
-    libcurl4-gnutls-dev libenet-dev libgloox-dev libicu-dev    \
+    libcurl4-gnutls-dev libenet-dev libicu-dev    \
     libminiupnpc-dev libnspr4-dev libnvtt-dev libogg-dev libopenal-dev   \
     libpng-dev libsdl2-dev libvorbis-dev libwxgtk3.0-dev libxcursor-dev  \
     libxml2-dev zlib1g-dev
+
+# the gloox library on trusty is not compatible with the current build
+# of 0ad
+mkdir gloox
+wget https://camaya.net/download/gloox-1.0.21.tar.bz2
+tar xzf gloox-1.0.21.tar.bz2
+cd gloox-1.0.21
+./configure
+make > /dev/null && sudo make install
+cd cd ../..

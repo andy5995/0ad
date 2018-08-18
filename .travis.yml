@@ -30,7 +30,20 @@ matrix:
           - ubuntu-toolchain-r-test
           packages:
           - gcc-6
+          - g++-6
       env: Tr_Compiler_Version="6"
+      dist: trusty
+    - os: linux
+      compiler: gcc
+      addons:
+        apt:
+          sources:
+          - ubuntu-toolchain-r-test
+          packages:
+          - gcc-8
+          - g++-8
+      env: Tr_Compiler_Version="8"
+      dist: trusty
 #    - os: linux
 #      compiler: clang
 #      addons:
@@ -52,5 +65,6 @@ before_install:
   - if [ "$TRAVIS_OS_NAME" = "osx" ]; then brew outdated cmake || brew upgrade cmake; brew outdated pkgconfig || brew upgrade pkgconfig; fi
   - if [ "$TRAVIS_OS_NAME" = "linux" ]; then ./.travis_before_install.sh; fi
 script:
+  - gcc --version
   - build/workspaces/update-workspaces.sh --with-system-nvtt
   - make -C build/workspaces/gcc

@@ -19,7 +19,7 @@ sudo apt-get install libboost-dev libboost-filesystem-dev   \
 # of 0ad
 mkdir gloox
 wget https://camaya.net/download/gloox-1.0.21.tar.bz2
-tar xzf gloox-1.0.21.tar.bz2
+tar xf gloox-1.0.21.tar.bz2
 cd gloox-1.0.21
 ./configure
 make > /dev/null && sudo make install

@@ -308,32 +308,21 @@ extern_lib_defs = {
 		compile_settings = function()
 			if os.is("windows") then
 				add_default_include_paths("gloox")
-			elseif os.is("macosx") then
-				-- Support GLOOX_CONFIG for overriding the default PATH-based gloox-config
-				gloox_config_path = os.getenv("GLOOX_CONFIG")
-				if not gloox_config_path then
-					gloox_config_path = "gloox-config"
-				end
-				pkgconfig_cflags(nil, gloox_config_path.." --cflags")
+			elseif not _OPTIONS["android"] then
+				-- Support GLOOX_CONFIG for overriding the default (pkg-config --cflags gloox)
+				-- i.e. on OSX where it gets set in update-workspaces.sh
+				pkgconfig_cflags("gloox", os.getenv("GLOOX_CONFIG") and " --cflags")
 			end
 		end,
 		link_settings = function()
 			if os.is("windows") then
 				add_default_lib_paths("gloox")
-			end
-			if os.is("macosx") then
-				gloox_config_path = os.getenv("GLOOX_CONFIG")
-				if not gloox_config_path then
-					gloox_config_path = "gloox-config"
-				end
-				pkgconfig_libs(nil, gloox_config_path.." --libs")
-			else
-				-- TODO: consider using pkg-config on non-Windows (for compile_settings too)
 				add_default_links({
 					win_names  = { "gloox-1.0" },
-					unix_names = { "gloox" },
 					no_delayload = 1,
 				})
+			elseif not _OPTIONS["android"] then
+				pkgconfig_libs("gloox", os.getenv("GLOOX_CONFIG") and " --libs")
 			end
 		end,
 	},
@@ -377,32 +366,22 @@ extern_lib_defs = {
 		compile_settings = function()
 			if os.is("windows") then
 				add_default_include_paths("icu")
-			elseif os.is("macosx") then
-				-- Support ICU_CONFIG for overriding the default PATH-based icu-config
-				icu_config_path = os.getenv("ICU_CONFIG")
-				if not icu_config_path then
-					icu_config_path = "icu-config"
-				end
-				pkgconfig_cflags(nil, icu_config_path.." --cppflags")
+			elseif not _OPTIONS["android"] then
+				-- Support ICU_CONFIG for overriding the default (pkg-config --cflags icu-i18n)
+				-- i.e. on OSX where it gets set in update-workspaces.sh
+				pkgconfig_cflags("icu-i18n", os.getenv("ICU_CONFIG") and " --cppflags")
 			end
 		end,
 		link_settings = function()
 			if os.is("windows") then
 				add_default_lib_paths("icu")
-			end
-			if os.is("macosx") then
-				icu_config_path = os.getenv("ICU_CONFIG")
-				if not icu_config_path then
-					icu_config_path = "gloox-config"
-				end
-				pkgconfig_libs(nil, icu_config_path.." --ldflags-searchpath --ldflags-libsonly --ldflags-system")
-			else
 				add_default_links({
 					win_names  = { "icuuc", "icuin" },
-					unix_names = { "icui18n", "icuuc" },
 					dbg_suffix = "",
 					no_delayload = 1,
 				})
+			elseif not _OPTIONS["android"] then
+				pkgconfig_libs("icu-i18n", os.getenv("ICU_CONFIG") and " --ldflags-searchpath --ldflags-libsonly --ldflags-system")
 			end
 		end,
 	},
@@ -464,20 +443,15 @@ extern_lib_defs = {
 		compile_settings = function()
 			if os.is("windows") then
 				add_default_include_paths("libxml2")
-			elseif os.is("macosx") then
-				-- Support XML2_CONFIG for overriding for the default PATH-based xml2-config
-				xml2_config_path = os.getenv("XML2_CONFIG")
-				if not xml2_config_path then
-					xml2_config_path = "xml2-config"
-				end
-
-				-- use xml2-config instead of pkg-config on OS X
-				pkgconfig_cflags(nil, xml2_config_path.." --cflags")
+			elseif not _OPTIONS["android"] then
+				-- Support XML2_CONFIG for overriding the default (pkg-config --cflags libxml-2.0)
+				-- i.e. on OSX where it gets set in update-workspaces.sh
+				pkgconfig_cflags("libxml-2.0", os.getenv("XML2_CONFIG") and " --cflags")
+			end
+			if os.is("macosx") then
 				-- libxml2 needs _REENTRANT or __MT__ for thread support;
 				-- OS X doesn't get either set by default, so do it manually
 				defines { "_REENTRANT" }
-			else
-				pkgconfig_cflags("libxml-2.0")
 			end
 		end,
 		link_settings = function()
@@ -488,14 +462,8 @@ extern_lib_defs = {
 				configuration "Release"
 					links { "libxml2" }
 				configuration { }
-			elseif os.is("macosx") then
-				xml2_config_path = os.getenv("XML2_CONFIG")
-				if not xml2_config_path then
-					xml2_config_path = "xml2-config"
-				end
-				pkgconfig_libs(nil, xml2_config_path.." --libs")
-			else
-				pkgconfig_libs("libxml-2.0")
+			elseif not _OPTIONS["android"] then
+				pkgconfig_libs("libxml-2.0", os.getenv("XML2_CONFIG") and " --libs")
 			end
 		end,
 	},
@@ -586,24 +554,14 @@ extern_lib_defs = {
 			elseif not _OPTIONS["android"] then
 				-- Support SDL2_CONFIG for overriding the default (pkg-config sdl2)
 				-- i.e. on OSX where it gets set in update-workspaces.sh
-				sdl_config_path = os.getenv("SDL2_CONFIG")
-				if sdl_config_path then
-					pkgconfig_cflags(nil, sdl_config_path.." --cflags")
-				else
-					pkgconfig_cflags("sdl2")
-				end
+				pkgconfig_cflags("sdl2", os.getenv("SDL2_CONFIG") and " --cflags")
 			end
 		end,
 		link_settings = function()
 			if os.is("windows") then
 				add_default_lib_paths("sdl2")
 			elseif not _OPTIONS["android"] then
-				sdl_config_path = os.getenv("SDL2_CONFIG")
-				if sdl_config_path then
-					pkgconfig_libs(nil, sdl_config_path.." --libs")
-				else
-					pkgconfig_libs("sdl2")
-				end
+				pkgconfig_libs("sdl2", os.getenv("SDL2_CONFIG") and " --libs")
 			end
 		end,
 	},
@@ -698,34 +656,31 @@ extern_lib_defs = {
 				includedirs { libraries_dir.."wxwidgets/include/msvc" }
 				add_default_include_paths("wxwidgets")
 			else
-
-				-- Support WX_CONFIG for overriding for the default PATH-based wx-config
-				wx_config_path = os.getenv("WX_CONFIG")
-				if not wx_config_path then
-					wx_config_path = "wx-config"
-				end
-
-				pkgconfig_cflags(nil, wx_config_path.." --unicode=yes --cxxflags")
+				-- wxwidgets does not come with a definition file for pkg-config,
+				-- so we have to use wxwidgets' own config tool
+				wx_config_path = os.getenv("WX_CONFIG") or "wx-config"
+				pkgconfig_cflags(nil, wx_config_path .. " --unicode=yes --cxxflags")
 			end
 		end,
 		link_settings = function()
 			if os.is("windows") then
 				libdirs { libraries_dir.."wxwidgets/lib/vc_lib" }
 			else
-				wx_config_path = os.getenv("WX_CONFIG")
-				if not wx_config_path then
-					wx_config_path = "wx-config"
-				end
-				pkgconfig_libs(nil, wx_config_path.." --unicode=yes --libs std,gl")
+				wx_config_path = os.getenv("WX_CONFIG") or "wx-config"
+				pkgconfig_libs(nil, wx_config_path .. " --unicode=yes --libs std,gl")
 			end
 		end,
 	},
 	x11 = {
+		compile_settings = function()
+			if not os.is("windows") and not os.is("macosx") then
+				pkgconfig_cflags("x11")
+			end
+		end,
 		link_settings = function()
-			add_default_links({
-				win_names  = { },
-				unix_names = { "X11" },
-			})
+			if not os.is("windows") and not os.is("macosx") then
+				pkgconfig_libs("x11")
+			end
 		end,
 	},
 	xcursor = {
